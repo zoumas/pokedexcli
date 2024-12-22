@@ -5,21 +5,16 @@ import (
 	"io"
 	"os"
 
+	"github.com/zoumas/pokedexcli/internal/cache"
 	"github.com/zoumas/pokedexcli/internal/pokeapi"
 )
 
 type config struct {
 	w        io.Writer
-	previous string
+	cache    *cache.Cache
 	next     string
+	previous string
 	args     []string
-}
-
-func newConfig(w io.Writer, next string) *config {
-	return &config{
-		w:    w,
-		next: next,
-	}
 }
 
 type command struct {
@@ -100,7 +95,7 @@ func commandMapb(cfg *config) error {
 }
 
 func listLocationsAreas(cfg *config, url string) error {
-	l, err := pokeapi.GetLocationAreas(url)
+	l, err := pokeapi.GetLocationAreas(cfg.cache, url)
 	if err != nil {
 		return err
 	}

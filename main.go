@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/zoumas/pokedexcli/internal/cache"
 )
 
 func main() {
@@ -18,7 +21,11 @@ func main() {
 // This way the repl can be tested. However it is not practical to do so.
 func repl(prompt string, r io.Reader, w io.Writer) {
 	scanner := bufio.NewScanner(r)
-	cfg := newConfig(w, "https://pokeapi.co/api/v2/location-area/")
+	cfg := &config{
+		w:     w,
+		next:  "https://pokeapi.co/api/v2/location-area/",
+		cache: cache.NewCache(30 * time.Second),
+	}
 	cmds := commands()
 
 	for {
