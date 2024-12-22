@@ -4,16 +4,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
 )
 
 type config struct {
-	w    io.Writer
-	args []string
+	w        io.Writer
+	previous string
+	next     string
+	args     []string
 }
 
-func newConfig(w io.Writer) *config {
+func newConfig(w io.Writer, next string) *config {
 	return &config{
-		w: w,
+		w:    w,
+		next: next,
 	}
 }
 
@@ -34,6 +39,16 @@ func commands() map[string]command {
 			callback:    commandHelp,
 			name:        "help",
 			description: "Displays a help message",
+		},
+		"map": {
+			callback:    commandMap,
+			name:        "map",
+			description: "Display the names of the next 20 location areas of the Pokemon world",
+		},
+		"mapb": {
+			callback:    commandMapb,
+			name:        "mapb",
+			description: "The opposite of map. Displays the previous 20 location areas",
 		},
 	}
 }
@@ -63,5 +78,39 @@ func commandHelp(cfg *config) error {
 	for _, cmd := range cmds {
 		fmt.Fprintf(cfg.w, "%s: %s\n", cmd.name, cmd.description)
 	}
+	return nil
+}
+
+func commandMap(cfg *config) error {
+	if cfg.next == "" {
+		fmt.Fprintln(cfg.w,
+			"An unseen force prevents you from going forward. It seems this is the end...")
+		return nil
+	}
+	return listLocationsAreas(cfg, cfg.next)
+}
+
+func commandMapb(cfg *config) error {
+	if cfg.previous == "" {
+		fmt.Fprintln(cfg.w,
+			"A gust of wind blows leaves around 🍃... There is nothing back there.")
+		return nil
+	}
+	return listLocationsAreas(cfg, cfg.previous)
+}
+
+func listLocationsAreas(cfg *config, url string) error {
+	l, err := pokeapi.GetLocationAreas(url)
+	if err != nil {
+		return err
+	}
+
+	cfg.next = l.Next
+	cfg.previous = l.Previous
+
+	for _, r := range l.Results {
+		fmt.Fprintln(cfg.w, r.Name)
+	}
+
 	return nil
 }

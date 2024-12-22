@@ -14,3 +14,5 @@ This project is part of [boot.dev](https://www.boot.dev/courses/build-pokedex-cl
 
 - `help`: prints a help message describing how to use the REPL
 - `exit`: exits the program
+- `map`: explore the world listing the next 20 location areas
+- `mapb`: the opposite of `map`. Go back 20 location areas

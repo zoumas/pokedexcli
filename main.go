@@ -15,14 +15,15 @@ func main() {
 
 // repl starts a read-eval-print loop.
 // It takes an io.Reader and io.Writer for dependency injection.
-// This way the repl can be tested. Howerver it is not practical to do so.
+// This way the repl can be tested. However it is not practical to do so.
 func repl(prompt string, r io.Reader, w io.Writer) {
 	scanner := bufio.NewScanner(r)
-	cfg := newConfig(w)
+	cfg := newConfig(w, "https://pokeapi.co/api/v2/location-area/")
 	cmds := commands()
 
 	for {
 		fmt.Fprint(w, prompt)
+
 		if !scanner.Scan() {
 			break
 		}
@@ -30,7 +31,6 @@ func repl(prompt string, r io.Reader, w io.Writer) {
 		text, err := scanner.Text(), scanner.Err()
 		if err != nil {
 			fmt.Fprintf(w, "reading input: %v", err)
-			// WARNING: return or continue?
 			return
 		}
 
