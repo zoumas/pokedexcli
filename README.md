@@ -16,3 +16,7 @@ This project is part of [boot.dev](https://www.boot.dev/courses/build-pokedex-cl
 - `exit`: exits the program
 - `map`: explore the world listing the next 20 location areas
 - `mapb`: the opposite of `map`. Go back 20 location areas
+- `explore`: see possible encounters for the given location area
+- `catch`: attempt to catch a wild Pokemon
+- `inspect`: view information about a caught Pokemon
+- `pokedex`: list the names of all the caught Pokemon

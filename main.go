@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zoumas/pokedexcli/internal/cache"
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
 )
 
 func main() {
@@ -22,9 +23,10 @@ func main() {
 func repl(prompt string, r io.Reader, w io.Writer) {
 	scanner := bufio.NewScanner(r)
 	cfg := &config{
-		w:     w,
-		next:  "https://pokeapi.co/api/v2/location-area/",
-		cache: cache.NewCache(30 * time.Second),
+		w:       w,
+		next:    "https://pokeapi.co/api/v2/location-area/",
+		cache:   cache.NewCache(30 * time.Second),
+		pokemon: make(map[string]*pokeapi.Pokemon),
 	}
 	cmds := commands()
 

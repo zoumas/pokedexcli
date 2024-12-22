@@ -13,9 +13,7 @@ type LocationAreas struct {
 	Next     string `json:"next"`
 	Results  []struct {
 		Name string `json:"name"`
-		// Url  string `json:"url"`
 	} `json:"results"`
-	// Count int `json:"count"`
 }
 
 func GetLocationAreas(c *cache.Cache, url string) (*LocationAreas, error) {
@@ -43,56 +41,12 @@ func GetLocationAreas(c *cache.Cache, url string) (*LocationAreas, error) {
 }
 
 type LocationArea struct {
-	// Location struct {
-	// 	Name string `json:"name"`
-	// 	URL  string `json:"url"`
-	// } `json:"location"`
 	PokemonEncounters []struct {
 		Pokemon struct {
 			Name string `json:"name"`
 			URL  string `json:"url"`
 		} `json:"pokemon"`
-		// VersionDetails []struct {
-		// 	Version struct {
-		// 		Name string `json:"name"`
-		// 		URL  string `json:"url"`
-		// 	} `json:"version"`
-		// 	EncounterDetails []struct {
-		// 		Method struct {
-		// 			Name string `json:"name"`
-		// 			URL  string `json:"url"`
-		// 		} `json:"method"`
-		// 		ConditionValues []any `json:"condition_values"`
-		// 		Chance          int   `json:"chance"`
-		// 		MaxLevel        int   `json:"max_level"`
-		// 		MinLevel        int   `json:"min_level"`
-		// 	} `json:"encounter_details"`
-		// 	MaxChance int `json:"max_chance"`
-		// } `json:"version_details"`
 	} `json:"pokemon_encounters"`
-	// EncounterMethodRates []struct {
-	// 	EncounterMethod struct {
-	// 		Name string `json:"name"`
-	// 		URL  string `json:"url"`
-	// 	} `json:"encounter_method"`
-	// 	VersionDetails []struct {
-	// 		Version struct {
-	// 			Name string `json:"name"`
-	// 			URL  string `json:"url"`
-	// 		} `json:"version"`
-	// 		Rate int `json:"rate"`
-	// 	} `json:"version_details"`
-	// } `json:"encounter_method_rates"`
-	// Names []struct {
-	// 	Language struct {
-	// 		Name string `json:"name"`
-	// 		URL  string `json:"url"`
-	// 	} `json:"language"`
-	// 	Name string `json:"name"`
-	// } `json:"names"`
-	// GameIndex int    `json:"game_index"`
-	// ID        int    `json:"id"`
-	// Name      string `json:"name"`
 }
 
 func GetLocationArea(c *cache.Cache, name string) (*LocationArea, error) {
@@ -120,4 +74,42 @@ func GetLocationArea(c *cache.Cache, name string) (*LocationArea, error) {
 		return nil, err
 	}
 	return &l, nil
+}
+
+type Pokemon struct {
+	Name    string `json:"name"`
+	Species struct {
+		Name string `json:"name"`
+	} `json:"species"`
+	Types []struct {
+		Type struct {
+			Name string `json:"name"`
+		} `json:"type"`
+	} `json:"types"`
+	Stats []struct {
+		Stat struct {
+			Name string `json:"name"`
+		} `json:"stat"`
+		BaseStat int `json:"base_stat"`
+	} `json:"stats"`
+	Height         int `json:"height"`
+	Order          int `json:"order"`
+	BaseExperience int `json:"base_experience"`
+	Weight         int `json:"weight"`
+}
+
+func GetPokemon(name string) (*Pokemon, error) {
+	url := "https://pokeapi.co/api/v2/pokemon/" + name
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var p Pokemon
+	err = json.NewDecoder(resp.Body).Decode(&p)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
