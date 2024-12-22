@@ -45,6 +45,11 @@ func commands() map[string]command {
 			name:        "mapb",
 			description: "The opposite of map. Displays the previous 20 location areas",
 		},
+		"explore": {
+			callback:    commandExplore,
+			name:        "explore",
+			description: "See possible encounters for the given location area",
+		},
 	}
 }
 
@@ -105,6 +110,25 @@ func listLocationsAreas(cfg *config, url string) error {
 
 	for _, r := range l.Results {
 		fmt.Fprintln(cfg.w, r.Name)
+	}
+
+	return nil
+}
+
+func commandExplore(cfg *config) error {
+	if len(cfg.args) == 0 {
+		return fmt.Errorf("There is nothing to explore...")
+	}
+	name := cfg.args[0]
+	fmt.Fprintf(cfg.w, "Exploring %s...\n", name)
+
+	l, err := pokeapi.GetLocationArea(cfg.cache, name)
+	if err != nil {
+		return fmt.Errorf("Something went wrong while exploring: %v", err)
+	}
+
+	for _, e := range l.PokemonEncounters {
+		fmt.Fprintln(cfg.w, "-", e.Pokemon.Name)
 	}
 
 	return nil
