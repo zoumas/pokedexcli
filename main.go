@@ -1,7 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"log"
+	"os"
+)
 
 func main() {
-	fmt.Println("Hello, World!")
+	if err := repl(os.Stdin, os.Stdout); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 }

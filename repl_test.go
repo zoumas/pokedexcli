@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"slices"
 	"testing"
 )
@@ -55,5 +56,20 @@ func Test_cleanInput(t *testing.T) {
 				t.Errorf("cleanInput() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_repl(t *testing.T) {
+	s := "CHARMANDER is better than bulbasaur\n\nPikachu is kinda mean to ash\n"
+	in := bytes.NewBufferString(s) // Simulate user input
+	out := bytes.NewBuffer(nil)    // Capture output
+
+	if err := repl(in, out); err != nil {
+		t.Fatalf("repl() returned error: %v", err)
+	}
+
+	want := "Pokedex > Your command was: charmander\nPokedex > Pokedex > Your command was: pikachu\nPokedex > "
+	if got := out.String(); got != want {
+		t.Fatalf("repl() output = %q, want %q", got, want)
 	}
 }
