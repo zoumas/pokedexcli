@@ -72,6 +72,8 @@ func Test_repl(t *testing.T) {
 				"Usage:\n\n" +
 				"exit: Exit the Pokedex\n" +
 				"help: Displays a help message\n" +
+				"map: Displays a list of location areas\n" +
+				"mapb: Displays a list of location areas in the previous page\n" +
 				"Pokedex > ",
 		},
 		{
