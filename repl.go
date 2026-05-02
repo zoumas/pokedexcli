@@ -10,6 +10,8 @@ import (
 func repl(r io.Reader, w io.Writer) error {
 	const PROMPT = "Pokedex > "
 
+	commands := getCommands(w)
+
 	scanner := bufio.NewScanner(r)
 	for {
 		_, _ = fmt.Fprint(w, PROMPT)
@@ -25,7 +27,16 @@ func repl(r io.Reader, w io.Writer) error {
 		}
 
 		firstWord := cleaned[0]
-		_, _ = fmt.Fprintln(w, "Your command was:", firstWord)
+
+		cmd, ok := commands[firstWord]
+		if !ok {
+			_, _ = fmt.Fprintln(w, "Unknown command")
+			continue
+		}
+
+		if err := cmd.callback(w); err != nil {
+			_, _ = fmt.Fprintf(w, "Error executing command: %v\n", err)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

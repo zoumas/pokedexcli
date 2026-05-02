@@ -60,16 +60,39 @@ func Test_cleanInput(t *testing.T) {
 }
 
 func Test_repl(t *testing.T) {
-	s := "CHARMANDER is better than bulbasaur\n\nPikachu is kinda mean to ash\n"
-	in := bytes.NewBufferString(s) // Simulate user input
-	out := bytes.NewBuffer(nil)    // Capture output
-
-	if err := repl(in, out); err != nil {
-		t.Fatalf("repl() returned error: %v", err)
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "help command prints stable usage output",
+			input: "help\n",
+			want: "Pokedex > Welcome to the Pokedex!\n" +
+				"Usage:\n\n" +
+				"exit: Exit the Pokedex\n" +
+				"help: Displays a help message\n" +
+				"Pokedex > ",
+		},
+		{
+			name:  "unknown commands are rejected",
+			input: "CHARMANDER is better than bulbasaur\n\nPikachu is kinda mean to ash\n",
+			want:  "Pokedex > Unknown command\nPokedex > Pokedex > Unknown command\nPokedex > ",
+		},
 	}
 
-	want := "Pokedex > Your command was: charmander\nPokedex > Pokedex > Your command was: pikachu\nPokedex > "
-	if got := out.String(); got != want {
-		t.Fatalf("repl() output = %q, want %q", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := bytes.NewBufferString(tt.input)
+			out := bytes.NewBuffer(nil)
+
+			if err := repl(in, out); err != nil {
+				t.Fatalf("repl() returned error: %v", err)
+			}
+
+			if got := out.String(); got != tt.want {
+				t.Fatalf("repl() output = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
