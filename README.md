@@ -12,10 +12,6 @@ By working through the first lesson, the goal is to practice:
 - building a CLI tool that makes interacting with a back-end API easier
 - understanding where caching can improve responsiveness as the project grows
 
-## Code review status
-
-The repository does not contain Go source files yet, so there is no concrete implementation to review.
-
 ## Idiomatic Go improvements to apply as you build
 
 Use these as review criteria while working through the guided project:
