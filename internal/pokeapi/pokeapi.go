@@ -37,3 +37,34 @@ func GetLocationArea(c *http.Client, url string) (area LocationArea, err error) 
 
 	return area, nil
 }
+
+type ExploredLocationArea struct {
+	// ID       int `json:"id"`
+	// Name string `json:"name"`
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+			// URL  string `json:"url"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
+}
+
+func ExploreLocationArea(c *http.Client, url string) (area ExploredLocationArea, err error) {
+	resp, err := c.Get(url)
+	if err != nil {
+		return ExploredLocationArea{}, fmt.Errorf("failed to explore location area: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, resp.Body.Close())
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return ExploredLocationArea{}, fmt.Errorf("failed to explore location area: unexpected status code: %s", resp.Status)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&area); err != nil {
+		return ExploredLocationArea{}, fmt.Errorf("failed to decode explored location area: %w", err)
+	}
+
+	return area, nil
+}

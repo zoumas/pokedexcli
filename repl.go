@@ -34,7 +34,7 @@ func repl(r io.Reader, w io.Writer) error {
 			continue
 		}
 
-		if err := cmd.callback(w); err != nil {
+		if err := cmd.callback(w, cleaned[1:]...); err != nil {
 			_, _ = fmt.Fprintf(w, "Error executing command: %v\n", err)
 		}
 	}

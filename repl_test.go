@@ -71,6 +71,7 @@ func Test_repl(t *testing.T) {
 			want: "Pokedex > Welcome to the Pokedex!\n" +
 				"Usage:\n\n" +
 				"exit: Exit the Pokedex\n" +
+				"explore: Explores a location area and lists the Pokemon that can be found there\n" +
 				"help: Displays a help message\n" +
 				"map: Displays a list of location areas\n" +
 				"mapb: Displays a list of location areas in the previous page\n" +
