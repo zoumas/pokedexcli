@@ -8,6 +8,9 @@ import (
 	"os"
 	"slices"
 	"time"
+
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
+	"github.com/zoumas/pokedexcli/internal/pokecache"
 )
 
 type command struct {
@@ -28,9 +31,10 @@ func getCommands(w io.Writer) map[string]command {
 	}
 
 	cfg := &Config{
-		client:   &http.Client{Timeout: 10 * time.Second},
-		next:     "https://pokeapi.co/api/v2/location-area/",
-		previous: nil,
+		client:        &http.Client{Timeout: 10 * time.Second},
+		locationCache: pokecache.NewCache[pokeapi.LocationArea](5 * time.Minute),
+		next:          "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20",
+		previous:      nil,
 	}
 
 	commands["map"] = command{
@@ -86,18 +90,28 @@ func commandHelp(w io.Writer, commands map[string]command) error {
 }
 
 type Config struct {
-	client   *http.Client
-	next     string
-	previous *string
+	client        *http.Client
+	locationCache *pokecache.Cache[pokeapi.LocationArea]
+	next          string
+	previous      *string
 }
 
 func commandMap(w io.Writer, cfg *Config, url string) error {
 	log.Printf("Fetching location areas from %q\n", url)
 
-	area, err := getLocationArea(cfg.client, url)
-	if err != nil {
-		return err
+	area, ok := cfg.locationCache.Get(url)
+	if !ok {
+		log.Printf("Cache miss for %q\n", url)
+		var err error
+		area, err = pokeapi.GetLocationArea(cfg.client, url)
+		if err != nil {
+			return err
+		}
+		cfg.locationCache.Add(url, area)
+	} else {
+		log.Printf("Cache hit for %q\n", url)
 	}
+
 	cfg.next = area.Next
 	cfg.previous = area.Previous
 

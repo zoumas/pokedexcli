@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
+	"github.com/zoumas/pokedexcli/internal/pokecache"
 )
 
 func Test_mapCommands_matchFirstThreeLivePages(t *testing.T) {
@@ -16,9 +18,9 @@ func Test_mapCommands_matchFirstThreeLivePages(t *testing.T) {
 	expectedPages := make([][]string, 0, 3)
 	nextURL := startURL
 	for range 3 {
-		area, err := getLocationArea(client, nextURL)
+		area, err := pokeapi.GetLocationArea(client, nextURL)
 		if err != nil {
-			t.Fatalf("getLocationArea(%q) returned an error: %v", nextURL, err)
+			t.Fatalf("GetLocationArea(%q) returned an error: %v", nextURL, err)
 		}
 
 		names := make([]string, 0, len(area.Results))
@@ -30,8 +32,9 @@ func Test_mapCommands_matchFirstThreeLivePages(t *testing.T) {
 	}
 
 	cfg := &Config{
-		client: client,
-		next:   startURL,
+		client:        client,
+		locationCache: pokecache.NewCache[pokeapi.LocationArea](5 * time.Minute),
+		next:          startURL,
 	}
 
 	for i, expectedNames := range expectedPages {
@@ -54,24 +57,6 @@ func Test_mapCommands_matchFirstThreeLivePages(t *testing.T) {
 		if got, want := out.String(), lines(expectedPages[i]); got != want {
 			t.Fatalf("commandMapb() page %d output = %q, want %q", i+1, got, want)
 		}
-	}
-}
-
-func Test_getLocationArea_returnsErrorForNonOKStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "nope", http.StatusBadGateway)
-	}))
-	defer server.Close()
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	_, err := getLocationArea(client, server.URL)
-	if err == nil {
-		t.Fatal("getLocationArea() error = nil, want non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "unexpected status code: 502 Bad Gateway") {
-		t.Fatalf("getLocationArea() error = %q, want status code details", err)
 	}
 }
 

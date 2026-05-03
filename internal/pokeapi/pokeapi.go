@@ -1,4 +1,5 @@
-package main
+// Package pokeapi provides functions to interact with the PokeAPI.
+package pokeapi
 
 import (
 	"encoding/json"
@@ -17,7 +18,7 @@ type LocationArea struct {
 	} `json:"results"`
 }
 
-func getLocationArea(c *http.Client, url string) (area LocationArea, err error) {
+func GetLocationArea(c *http.Client, url string) (area LocationArea, err error) {
 	resp, err := c.Get(url)
 	if err != nil {
 		return LocationArea{}, fmt.Errorf("failed to get location areas: %w", err)
