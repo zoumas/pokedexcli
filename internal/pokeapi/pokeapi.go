@@ -68,3 +68,50 @@ func ExploreLocationArea(c *http.Client, url string) (area ExploredLocationArea,
 
 	return area, nil
 }
+
+type Pokemon struct {
+	BaseExperience int `json:"base_experience"`
+
+	Height int `json:"height"`
+	Weight int `json:"weight"`
+
+	// ID   int    `json:"id"`
+	// Name string `json:"name"`
+
+	Stats []struct {
+		BaseStat int `json:"base_stat"`
+		// Effort   int `json:"effort"`
+		Stat struct {
+			Name string `json:"name"`
+			// URL  string `json:"url"`
+		} `json:"stat"`
+	} `json:"stats"`
+
+	Types []struct {
+		// Slot int `json:"slot"`
+		Type struct {
+			Name string `json:"name"`
+			// URL  string `json:"url"`
+		} `json:"type"`
+	} `json:"types"`
+}
+
+func GetPokemon(c *http.Client, url string) (pokemon Pokemon, err error) {
+	resp, err := c.Get(url)
+	if err != nil {
+		return Pokemon{}, fmt.Errorf("failed to get pokemon: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, resp.Body.Close())
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return Pokemon{}, fmt.Errorf("failed to get pokemon: unexpected status code: %s", resp.Status)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&pokemon); err != nil {
+		return Pokemon{}, fmt.Errorf("failed to decode pokemon: %w", err)
+	}
+
+	return pokemon, nil
+}

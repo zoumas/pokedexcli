@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"slices"
@@ -20,8 +21,33 @@ type command struct {
 	callback    func(w io.Writer, args ...string) error
 }
 
+type Config struct {
+	client       *http.Client
+	mapCache     *pokecache.Cache[pokeapi.LocationArea]
+	exploreCache *pokecache.Cache[pokeapi.ExploredLocationArea]
+	pokemonCache *pokecache.Cache[pokeapi.Pokemon]
+	pokedex      map[string]pokeapi.Pokemon
+	randIntn     func(n int) int
+	next         string
+	previous     *string
+}
+
+func NewConfig() *Config {
+	return &Config{
+		client:       &http.Client{Timeout: 10 * time.Second},
+		mapCache:     pokecache.NewCache[pokeapi.LocationArea](5 * time.Minute),
+		exploreCache: pokecache.NewCache[pokeapi.ExploredLocationArea](5 * time.Minute),
+		pokemonCache: pokecache.NewCache[pokeapi.Pokemon](5 * time.Minute),
+		pokedex:      make(map[string]pokeapi.Pokemon),
+		randIntn:     rand.New(rand.NewSource(time.Now().UnixNano())).Intn,
+		next:         "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20",
+		previous:     nil,
+	}
+}
+
 func getCommands(w io.Writer) map[string]command {
 	commands := map[string]command{}
+	cfg := NewConfig()
 
 	commands["exit"] = command{
 		name:        "exit",
@@ -29,14 +55,6 @@ func getCommands(w io.Writer) map[string]command {
 		callback: func(io.Writer, ...string) error {
 			return commandExit(w, os.Exit)
 		},
-	}
-
-	cfg := &Config{
-		client:       &http.Client{Timeout: 10 * time.Second},
-		mapCache:     pokecache.NewCache[pokeapi.LocationArea](5 * time.Minute),
-		exploreCache: pokecache.NewCache[pokeapi.ExploredLocationArea](5 * time.Minute),
-		next:         "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20",
-		previous:     nil,
 	}
 
 	commands["map"] = command{
@@ -64,6 +82,18 @@ func getCommands(w io.Writer) map[string]command {
 			}
 			name := args[0]
 			return commandExplore(w, cfg, name)
+		},
+	}
+
+	commands["catch"] = command{
+		name:        "catch",
+		description: "Attempts to catch a Pokemon by name",
+		callback: func(w io.Writer, args ...string) error {
+			if len(args) == 0 {
+				return errors.New("catch command requires a Pokemon name")
+			}
+			name := args[0]
+			return commandCatch(w, cfg, name)
 		},
 	}
 
@@ -101,14 +131,6 @@ func commandHelp(w io.Writer, commands map[string]command) error {
 	}
 
 	return nil
-}
-
-type Config struct {
-	client       *http.Client
-	mapCache     *pokecache.Cache[pokeapi.LocationArea]
-	exploreCache *pokecache.Cache[pokeapi.ExploredLocationArea]
-	next         string
-	previous     *string
 }
 
 func commandMap(w io.Writer, cfg *Config, url string) error {
@@ -175,4 +197,47 @@ func commandExplore(w io.Writer, cfg *Config, name string) error {
 	}
 
 	return nil
+}
+
+func commandCatch(w io.Writer, cfg *Config, name string) error {
+	_, _ = fmt.Fprintf(w, "Throwing a Pokeball at %s...\n", name)
+
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s/", name)
+
+	pokemon, ok := cfg.pokemonCache.Get(url)
+	if !ok {
+		log.Printf("Cache miss for %q\n", url)
+		var err error
+		pokemon, err = pokeapi.GetPokemon(cfg.client, url)
+		if err != nil {
+			return fmt.Errorf("failed to catch %s: %w", name, err)
+		}
+		cfg.pokemonCache.Add(url, pokemon)
+	} else {
+		log.Printf("Cache hit for %q\n", url)
+	}
+
+	catchChance := catchChanceForBaseExperience(pokemon.BaseExperience)
+	log.Printf("Catch chance for %s is %d%%\n", name, catchChance)
+	randIntn := cfg.randIntn
+	if randIntn == nil {
+		randIntn = rand.New(rand.NewSource(time.Now().UnixNano())).Intn
+	}
+	roll := randIntn(100)
+	caught := roll < catchChance
+	log.Printf("Rolled a %d, caught: %t\n", roll, caught)
+	if caught {
+		_, _ = fmt.Fprintf(w, "%s was caught!\n", name)
+		cfg.pokedex[name] = pokemon
+		log.Printf("%v\n", cfg.pokedex)
+	} else {
+		_, _ = fmt.Fprintf(w, "%s escaped!\n", name)
+	}
+
+	return nil
+}
+
+func catchChanceForBaseExperience(baseExperience int) int {
+	catchChance := 90 - baseExperience/4
+	return max(10, catchChance)
 }

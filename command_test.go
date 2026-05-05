@@ -75,6 +75,19 @@ func Test_exploreCommand_requiresLocationAreaName(t *testing.T) {
 	}
 }
 
+func Test_catchCommand_requiresPokemonName(t *testing.T) {
+	commands := getCommands(bytes.NewBuffer(nil))
+
+	err := commands["catch"].callback(bytes.NewBuffer(nil))
+	if err == nil {
+		t.Fatal("catch command callback() error = nil, want error")
+	}
+
+	if got, want := err.Error(), "catch command requires a Pokemon name"; got != want {
+		t.Fatalf("catch command callback() error = %q, want %q", got, want)
+	}
+}
+
 func Test_commandExplore_printsPokemonAndUsesCache(t *testing.T) {
 	const areaName = "test-area"
 
@@ -119,6 +132,122 @@ func Test_commandExplore_printsPokemonAndUsesCache(t *testing.T) {
 
 	if got, want := requests, 1; got != want {
 		t.Fatalf("request count = %d, want %d", got, want)
+	}
+}
+
+func Test_commandCatch_printsCaughtMessageAndUsesCache(t *testing.T) {
+	const pokemonName = "pikachu"
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+
+		if got, want := r.URL.Path, "/api/v2/pokemon/"+pokemonName+"/"; got != want {
+			t.Fatalf("request path = %q, want %q", got, want)
+		}
+
+		_, _ = w.Write([]byte(`{
+			"base_experience": 20,
+			"height": 4,
+			"weight": 60,
+			"stats": [],
+			"types": []
+		}`))
+	}))
+	defer server.Close()
+
+	client := serverRewriteClient(t, server.URL)
+	cfg := &Config{
+		client:       client,
+		pokemonCache: pokecache.NewCache[pokeapi.Pokemon](5 * time.Minute),
+		pokedex:      make(map[string]pokeapi.Pokemon),
+		randIntn: func(int) int {
+			return 10
+		},
+	}
+
+	want := "Throwing a Pokeball at pikachu...\n" +
+		"pikachu was caught!\n"
+
+	for i := range 2 {
+		var out bytes.Buffer
+		if err := commandCatch(&out, cfg, pokemonName); err != nil {
+			t.Fatalf("commandCatch() run %d returned an error: %v", i+1, err)
+		}
+
+		if got := out.String(); got != want {
+			t.Fatalf("commandCatch() run %d output = %q, want %q", i+1, got, want)
+		}
+	}
+
+	if got, want := requests, 1; got != want {
+		t.Fatalf("request count = %d, want %d", got, want)
+	}
+
+	if _, ok := cfg.pokedex[pokemonName]; !ok {
+		t.Fatalf("pokedex missing %q after successful catch", pokemonName)
+	}
+}
+
+func Test_commandCatch_printsEscapeMessageWhenRollMisses(t *testing.T) {
+	const pokemonName = "mewtwo"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/api/v2/pokemon/"+pokemonName+"/"; got != want {
+			t.Fatalf("request path = %q, want %q", got, want)
+		}
+
+		_, _ = w.Write([]byte(`{
+			"base_experience": 200,
+			"height": 20,
+			"weight": 1220,
+			"stats": [],
+			"types": []
+		}`))
+	}))
+	defer server.Close()
+
+	client := serverRewriteClient(t, server.URL)
+	cfg := &Config{
+		client:       client,
+		pokemonCache: pokecache.NewCache[pokeapi.Pokemon](5 * time.Minute),
+		pokedex:      make(map[string]pokeapi.Pokemon),
+		randIntn: func(int) int {
+			return 50
+		},
+	}
+
+	var out bytes.Buffer
+	if err := commandCatch(&out, cfg, pokemonName); err != nil {
+		t.Fatalf("commandCatch() returned an error: %v", err)
+	}
+
+	want := "Throwing a Pokeball at mewtwo...\n" +
+		"mewtwo escaped!\n"
+	if got := out.String(); got != want {
+		t.Fatalf("commandCatch() output = %q, want %q", got, want)
+	}
+
+	if _, ok := cfg.pokedex[pokemonName]; ok {
+		t.Fatalf("pokedex unexpectedly contains %q after escape", pokemonName)
+	}
+}
+
+func Test_catchChanceForBaseExperience_higherBaseExperienceIsHarder(t *testing.T) {
+	tests := []struct {
+		baseExperience int
+		want           int
+	}{
+		{baseExperience: 20, want: 85},
+		{baseExperience: 240, want: 30},
+		{baseExperience: 324, want: 10},
+		{baseExperience: 400, want: 10},
+	}
+
+	for _, tt := range tests {
+		if got := catchChanceForBaseExperience(tt.baseExperience); got != tt.want {
+			t.Fatalf("catchChanceForBaseExperience(%d) = %d, want %d", tt.baseExperience, got, tt.want)
+		}
 	}
 }
 

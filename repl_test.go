@@ -70,6 +70,7 @@ func Test_repl(t *testing.T) {
 			input: "help\n",
 			want: "Pokedex > Welcome to the Pokedex!\n" +
 				"Usage:\n\n" +
+				"catch: Attempts to catch a Pokemon by name\n" +
 				"exit: Exit the Pokedex\n" +
 				"explore: Explores a location area and lists the Pokemon that can be found there\n" +
 				"help: Displays a help message\n" +
