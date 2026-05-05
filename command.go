@@ -97,6 +97,18 @@ func getCommands(w io.Writer) map[string]command {
 		},
 	}
 
+	commands["inspect"] = command{
+		name:        "inspect",
+		description: "Desplays detailed information about a Pokemon in your Pokedex by name",
+		callback: func(w io.Writer, args ...string) error {
+			if len(args) == 0 {
+				return errors.New("inspect command requires a Pokemon name")
+			}
+			name := args[0]
+			return commandInspect(w, cfg, name)
+		},
+	}
+
 	commands["help"] = command{
 		name:        "help",
 		description: "Displays a help message",
@@ -240,4 +252,26 @@ func commandCatch(w io.Writer, cfg *Config, name string) error {
 func catchChanceForBaseExperience(baseExperience int) int {
 	catchChance := 90 - baseExperience/4
 	return max(10, catchChance)
+}
+
+func commandInspect(w io.Writer, cfg *Config, name string) error {
+	pokemon, ok := cfg.pokedex[name]
+	if !ok {
+		_, _ = fmt.Fprintf(w, "You don't have %s in your Pokedex. Try catching it first!\n", name)
+		return nil
+	}
+
+	_, _ = fmt.Fprintln(w, "Name:", pokemon.Name)
+	_, _ = fmt.Fprintln(w, "Height:", pokemon.Height)
+	_, _ = fmt.Fprintln(w, "Weight:", pokemon.Weight)
+	_, _ = fmt.Fprintln(w, "Stats:")
+	for _, stat := range pokemon.Stats {
+		_, _ = fmt.Fprintf(w, " - %s: %d\n", stat.Stat.Name, stat.BaseStat)
+	}
+	_, _ = fmt.Fprintln(w, "Types:")
+	for _, t := range pokemon.Types {
+		_, _ = fmt.Fprintf(w, " - %s\n", t.Type.Name)
+	}
+
+	return nil
 }

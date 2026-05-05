@@ -88,6 +88,19 @@ func Test_catchCommand_requiresPokemonName(t *testing.T) {
 	}
 }
 
+func Test_inspectCommand_requiresPokemonName(t *testing.T) {
+	commands := getCommands(bytes.NewBuffer(nil))
+
+	err := commands["inspect"].callback(bytes.NewBuffer(nil))
+	if err == nil {
+		t.Fatal("inspect command callback() error = nil, want error")
+	}
+
+	if got, want := err.Error(), "inspect command requires a Pokemon name"; got != want {
+		t.Fatalf("inspect command callback() error = %q, want %q", got, want)
+	}
+}
+
 func Test_commandExplore_printsPokemonAndUsesCache(t *testing.T) {
 	const areaName = "test-area"
 
@@ -248,6 +261,87 @@ func Test_catchChanceForBaseExperience_higherBaseExperienceIsHarder(t *testing.T
 		if got := catchChanceForBaseExperience(tt.baseExperience); got != tt.want {
 			t.Fatalf("catchChanceForBaseExperience(%d) = %d, want %d", tt.baseExperience, got, tt.want)
 		}
+	}
+}
+
+func Test_commandInspect_printsNotCaughtMessage(t *testing.T) {
+	cfg := &Config{
+		pokedex: make(map[string]pokeapi.Pokemon),
+	}
+
+	var out bytes.Buffer
+	if err := commandInspect(&out, cfg, "pidgey"); err != nil {
+		t.Fatalf("commandInspect() returned an error: %v", err)
+	}
+
+	want := "You don't have pidgey in your Pokedex. Try catching it first!\n"
+	if got := out.String(); got != want {
+		t.Fatalf("commandInspect() output = %q, want %q", got, want)
+	}
+}
+
+func Test_commandInspect_printsPokemonDetailsFromPokedex(t *testing.T) {
+	cfg := &Config{
+		pokedex: map[string]pokeapi.Pokemon{
+			"pidgey": {
+				Name:   "pidgey",
+				Height: 3,
+				Weight: 18,
+				Stats: []struct {
+					BaseStat int `json:"base_stat"`
+					Stat     struct {
+						Name string `json:"name"`
+					} `json:"stat"`
+				}{
+					{
+						BaseStat: 40,
+						Stat: struct {
+							Name string `json:"name"`
+						}{Name: "hp"},
+					},
+					{
+						BaseStat: 45,
+						Stat: struct {
+							Name string `json:"name"`
+						}{Name: "attack"},
+					},
+				},
+				Types: []struct {
+					Type struct {
+						Name string `json:"name"`
+					} `json:"type"`
+				}{
+					{
+						Type: struct {
+							Name string `json:"name"`
+						}{Name: "normal"},
+					},
+					{
+						Type: struct {
+							Name string `json:"name"`
+						}{Name: "flying"},
+					},
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := commandInspect(&out, cfg, "pidgey"); err != nil {
+		t.Fatalf("commandInspect() returned an error: %v", err)
+	}
+
+	want := "Name: pidgey\n" +
+		"Height: 3\n" +
+		"Weight: 18\n" +
+		"Stats:\n" +
+		" - hp: 40\n" +
+		" - attack: 45\n" +
+		"Types:\n" +
+		" - normal\n" +
+		" - flying\n"
+	if got := out.String(); got != want {
+		t.Fatalf("commandInspect() output = %q, want %q", got, want)
 	}
 }
 
