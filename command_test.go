@@ -160,6 +160,8 @@ func Test_commandCatch_printsCaughtMessageAndUsesCache(t *testing.T) {
 		}
 
 		_, _ = w.Write([]byte(`{
+			"id": 25,
+			"name": "pikachu",
 			"base_experience": 20,
 			"height": 4,
 			"weight": 60,
@@ -180,7 +182,8 @@ func Test_commandCatch_printsCaughtMessageAndUsesCache(t *testing.T) {
 	}
 
 	want := "Throwing a Pokeball at pikachu...\n" +
-		"pikachu was caught!\n"
+		"pikachu was caught!\n" +
+		"You may now inspect it with the inspect command.\n"
 
 	for i := range 2 {
 		var out bytes.Buffer
@@ -211,6 +214,8 @@ func Test_commandCatch_printsEscapeMessageWhenRollMisses(t *testing.T) {
 		}
 
 		_, _ = w.Write([]byte(`{
+			"id": 150,
+			"name": "mewtwo",
 			"base_experience": 200,
 			"height": 20,
 			"weight": 1220,
@@ -342,6 +347,29 @@ func Test_commandInspect_printsPokemonDetailsFromPokedex(t *testing.T) {
 		" - flying\n"
 	if got := out.String(); got != want {
 		t.Fatalf("commandInspect() output = %q, want %q", got, want)
+	}
+}
+
+func Test_commandPokedex_printsCaughtPokemonInPokedexOrder(t *testing.T) {
+	cfg := &Config{
+		pokedex: map[string]pokeapi.Pokemon{
+			"mew":   {ID: 151, Name: "mew"},
+			"abra":  {ID: 63, Name: "abra"},
+			"zubat": {ID: 41, Name: "zubat"},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := commandPokedex(&out, cfg); err != nil {
+		t.Fatalf("commandPokedex() returned an error: %v", err)
+	}
+
+	want := "Your Pokedex:\n" +
+		" - zubat\n" +
+		" - abra\n" +
+		" - mew\n"
+	if got := out.String(); got != want {
+		t.Fatalf("commandPokedex() output = %q, want %q", got, want)
 	}
 }
 

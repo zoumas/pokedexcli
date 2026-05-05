@@ -109,6 +109,14 @@ func getCommands(w io.Writer) map[string]command {
 		},
 	}
 
+	commands["pokedex"] = command{
+		name:        "pokedex",
+		description: "Lists all the Pokemon you have caught in your Pokedex",
+		callback: func(w io.Writer, args ...string) error {
+			return commandPokedex(w, cfg)
+		},
+	}
+
 	commands["help"] = command{
 		name:        "help",
 		description: "Displays a help message",
@@ -240,6 +248,7 @@ func commandCatch(w io.Writer, cfg *Config, name string) error {
 	log.Printf("Rolled a %d, caught: %t\n", roll, caught)
 	if caught {
 		_, _ = fmt.Fprintf(w, "%s was caught!\n", name)
+		_, _ = fmt.Fprintln(w, "You may now inspect it with the inspect command.")
 		cfg.pokedex[name] = pokemon
 		log.Printf("%v\n", cfg.pokedex)
 	} else {
@@ -273,5 +282,30 @@ func commandInspect(w io.Writer, cfg *Config, name string) error {
 		_, _ = fmt.Fprintf(w, " - %s\n", t.Type.Name)
 	}
 
+	return nil
+}
+
+func commandPokedex(w io.Writer, cfg *Config) error {
+	_, _ = fmt.Fprintln(w, "Your Pokedex:")
+	pokemon := make([]pokeapi.Pokemon, 0, len(cfg.pokedex))
+	for _, p := range cfg.pokedex {
+		pokemon = append(pokemon, p)
+	}
+	slices.SortFunc(pokemon, func(a, b pokeapi.Pokemon) int {
+		if a.ID != b.ID {
+			return a.ID - b.ID
+		}
+		if a.Name < b.Name {
+			return -1
+		}
+		if a.Name > b.Name {
+			return 1
+		}
+		return 0
+	})
+
+	for _, p := range pokemon {
+		_, _ = fmt.Fprintf(w, " - %s\n", p.Name)
+	}
 	return nil
 }

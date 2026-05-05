@@ -77,6 +77,7 @@ func Test_repl(t *testing.T) {
 				"inspect: Desplays detailed information about a Pokemon in your Pokedex by name\n" +
 				"map: Displays a list of location areas\n" +
 				"mapb: Displays a list of location areas in the previous page\n" +
+				"pokedex: Lists all the Pokemon you have caught in your Pokedex\n" +
 				"Pokedex > ",
 		},
 		{
