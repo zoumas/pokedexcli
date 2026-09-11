@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,11 +10,18 @@ import (
 )
 
 // startREPL reads commands from r, one per line, and writes the prompt and the
-// result of each command to w. It runs until r is exhausted. It returns 0 on a
-// clean end of input and 1 if reading r failed.
+// output of each command to w. Unknown commands are reported and the loop
+// continues. It stops when r is exhausted or when a command returns errExit.
+// It returns 0 on a clean end of input or a requested exit, and 1 if reading r
+// failed.
 func startREPL(r io.Reader, w io.Writer) (exitCode int) {
 	const prompt = "Pokedex > "
 	scanner := bufio.NewScanner(r)
+	registry := getCommandRegistry()
+	cfg := commandConfig{
+		w:        w,
+		registry: registry,
+	}
 
 	for {
 		_, _ = fmt.Fprint(w, prompt)
@@ -28,7 +36,19 @@ func startREPL(r io.Reader, w io.Writer) (exitCode int) {
 		}
 
 		command := input[0]
-		_, _ = fmt.Fprintf(w, "Your command was: %s\n", command)
+		c, ok := registry[command]
+		if !ok {
+			_, _ = fmt.Fprintln(w, "Unknown command")
+			continue
+		}
+
+		if err := c.callback(cfg); err != nil {
+			if errors.Is(err, errExit) {
+				return 0
+			}
+
+			log.Printf("command error: %v", err)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

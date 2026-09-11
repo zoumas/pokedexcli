@@ -49,7 +49,13 @@ func TestCleanInput(t *testing.T) {
 }
 
 func TestStartREPL(t *testing.T) {
-	const prompt = "Pokedex > "
+	const (
+		prompt   = "Pokedex > "
+		helpText = "Welcome to the Pokedex!\nUsage:\n\n" +
+			"exit: Exit the Pokedex\n" +
+			"help: Displays a help menu\n"
+		goodbye = "Closing the Pokedex... Goodbye!\n"
+	)
 
 	cases := []struct {
 		name  string
@@ -57,21 +63,29 @@ func TestStartREPL(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "single command",
-			input: "Pikachu\n",
-			want:  prompt + "Your command was: pikachu\n" + prompt,
+			name:  "help lists every registered command",
+			input: "help\n",
+			want:  prompt + helpText + prompt,
 		},
 		{
-			name:  "only the first word is echoed",
-			input: "Charmander Bulbasaur PIKACHU\n",
-			want:  prompt + "Your command was: charmander\n" + prompt,
+			name:  "command lookup is case insensitive",
+			input: "HELP\n",
+			want:  prompt + helpText + prompt,
 		},
 		{
-			name:  "successive commands",
-			input: "first\nSECOND\n",
-			want: prompt + "Your command was: first\n" +
-				prompt + "Your command was: second\n" +
-				prompt,
+			name:  "only the first word is treated as the command",
+			input: "help me please\n",
+			want:  prompt + helpText + prompt,
+		},
+		{
+			name:  "unknown command is reported and the loop continues",
+			input: "bogus\nhelp\n",
+			want:  prompt + "Unknown command\n" + prompt + helpText + prompt,
+		},
+		{
+			name:  "exit stops the loop and ignores later input",
+			input: "exit\nhelp\n",
+			want:  prompt + goodbye,
 		},
 		{
 			name:  "blank lines reprompt without output",
@@ -112,5 +126,35 @@ func TestStartREPLReadError(t *testing.T) {
 	}
 	if got, want := w.String(), "Pokedex > "; got != want {
 		t.Errorf("startREPL(failing reader) output = %q, want %q", got, want)
+	}
+}
+
+func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
+	var w bytes.Buffer
+
+	cfg := commandConfig{w: &w, registry: getCommandRegistry()}
+
+	if err := commandHelp(cfg); err != nil {
+		t.Fatalf("commandHelp() error = %v, want nil", err)
+	}
+
+	got := w.String()
+	for name, c := range cfg.registry {
+		if !strings.Contains(got, name+": "+c.description+"\n") {
+			t.Errorf("commandHelp() output is missing command %q, got:\n%s", name, got)
+		}
+	}
+}
+
+func TestCommandExitSignalsExit(t *testing.T) {
+	var w bytes.Buffer
+
+	err := commandExit(commandConfig{w: &w})
+
+	if !errors.Is(err, errExit) {
+		t.Errorf("commandExit() error = %v, want errExit", err)
+	}
+	if got, want := w.String(), "Closing the Pokedex... Goodbye!\n"; got != want {
+		t.Errorf("commandExit() output = %q, want %q", got, want)
 	}
 }
