@@ -3,12 +3,26 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"testing/iotest"
 
 	"github.com/google/go-cmp/cmp"
 )
+
+const prompt = "Pokedex > "
+
+// helpOutput builds the text commandHelp writes for registry, so that tests do
+// not restate which commands exist.
+func helpOutput(registry map[string]cliCommand) string {
+	var b strings.Builder
+	b.WriteString("Welcome to the Pokedex!\nUsage:\n\n")
+	for _, c := range sortedCommands(registry) {
+		fmt.Fprintf(&b, "%s: %s\n", c.name, c.description)
+	}
+	return b.String()
+}
 
 func TestCleanInput(t *testing.T) {
 	cases := []struct {
@@ -49,13 +63,8 @@ func TestCleanInput(t *testing.T) {
 }
 
 func TestStartREPL(t *testing.T) {
-	const (
-		prompt   = "Pokedex > "
-		helpText = "Welcome to the Pokedex!\nUsage:\n\n" +
-			"exit: Exit the Pokedex\n" +
-			"help: Displays a help menu\n"
-		goodbye = "Closing the Pokedex... Goodbye!\n"
-	)
+	const goodbye = "Closing the Pokedex... Goodbye!\n"
+	helpText := helpOutput(newCommandRegistry())
 
 	cases := []struct {
 		name  string
@@ -103,7 +112,7 @@ func TestStartREPL(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var w bytes.Buffer
 
-			exitCode := startREPL(strings.NewReader(c.input), &w)
+			exitCode := startREPL(strings.NewReader(c.input), &w, newCommandRegistry())
 
 			if exitCode != 0 {
 				t.Errorf("startREPL(%q) exit code = %d, want 0", c.input, exitCode)
@@ -116,33 +125,52 @@ func TestStartREPL(t *testing.T) {
 }
 
 func TestStartREPLReadError(t *testing.T) {
-	wantErr := errors.New("boom")
+	readErr := errors.New("boom")
 	var w bytes.Buffer
 
-	exitCode := startREPL(iotest.ErrReader(wantErr), &w)
+	exitCode := startREPL(iotest.ErrReader(readErr), &w, newCommandRegistry())
 
 	if exitCode != 1 {
 		t.Errorf("startREPL(failing reader) exit code = %d, want 1", exitCode)
 	}
-	if got, want := w.String(), "Pokedex > "; got != want {
+	if got, want := w.String(), prompt; got != want {
 		t.Errorf("startREPL(failing reader) output = %q, want %q", got, want)
+	}
+}
+
+func TestStartREPLCommandError(t *testing.T) {
+	const input = "boom\nboom\n"
+	registry := map[string]cliCommand{
+		"boom": {
+			name:        "boom",
+			description: "always fails",
+			callback: func(commandConfig) error {
+				return errors.New("command failed")
+			},
+		},
+	}
+	var w bytes.Buffer
+
+	exitCode := startREPL(strings.NewReader(input), &w, registry)
+
+	if exitCode != 0 {
+		t.Errorf("startREPL(%q) exit code = %d, want 0", input, exitCode)
+	}
+	if diff := cmp.Diff(prompt+prompt+prompt, w.String()); diff != "" {
+		t.Errorf("startREPL(%q) output diff (-want +got):\n%s", input, diff)
 	}
 }
 
 func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 	var w bytes.Buffer
-
-	cfg := commandConfig{w: &w, registry: getCommandRegistry()}
+	cfg := commandConfig{w: &w, registry: newCommandRegistry()}
 
 	if err := commandHelp(cfg); err != nil {
 		t.Fatalf("commandHelp() error = %v, want nil", err)
 	}
 
-	got := w.String()
-	for name, c := range cfg.registry {
-		if !strings.Contains(got, name+": "+c.description+"\n") {
-			t.Errorf("commandHelp() output is missing command %q, got:\n%s", name, got)
-		}
+	if diff := cmp.Diff(helpOutput(cfg.registry), w.String()); diff != "" {
+		t.Errorf("commandHelp() output diff (-want +got):\n%s", diff)
 	}
 }
 
@@ -158,3 +186,32 @@ func TestCommandExitSignalsExit(t *testing.T) {
 		t.Errorf("commandExit() output = %q, want %q", got, want)
 	}
 }
+
+func TestCommandWriteErrors(t *testing.T) {
+	writeErr := errors.New("write failed")
+
+	cases := []struct {
+		name string
+		cmd  commandFunc
+	}{
+		{name: "commandHelp", cmd: commandHelp},
+		{name: "commandExit", cmd: commandExit},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := commandConfig{w: errWriter{writeErr}, registry: newCommandRegistry()}
+
+			err := c.cmd(cfg)
+
+			if !errors.Is(err, writeErr) {
+				t.Errorf("%s(failing writer) error = %v, want %v", c.name, err, writeErr)
+			}
+		})
+	}
+}
+
+// errWriter fails every write with err.
+type errWriter struct{ err error }
+
+func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
