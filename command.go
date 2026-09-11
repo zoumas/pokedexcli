@@ -8,12 +8,12 @@ import (
 	"slices"
 )
 
-type commandConfig struct {
+type config struct {
 	w        io.Writer
 	registry map[string]cliCommand
 }
 
-type commandFunc func(cfg commandConfig) error
+type commandFunc func(cfg *config) error
 
 type cliCommand struct {
 	name        string
@@ -57,14 +57,14 @@ func (e exitError) Error() string {
 // errExit tells the REPL to stop reading commands and return successfully.
 const errExit exitError = "exit"
 
-func commandExit(cfg commandConfig) error {
+func commandExit(cfg *config) error {
 	if _, err := fmt.Fprintln(cfg.w, "Closing the Pokedex... Goodbye!"); err != nil {
 		return err
 	}
 	return errExit
 }
 
-func commandHelp(cfg commandConfig) error {
+func commandHelp(cfg *config) error {
 	if _, err := fmt.Fprint(cfg.w, "Welcome to the Pokedex!\nUsage:\n\n"); err != nil {
 		return err
 	}

@@ -112,7 +112,7 @@ func TestStartREPL(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var w bytes.Buffer
 
-			exitCode := startREPL(strings.NewReader(c.input), &w, newCommandRegistry())
+			exitCode := startREPL(strings.NewReader(c.input), &config{w: &w, registry: newCommandRegistry()})
 
 			if exitCode != 0 {
 				t.Errorf("startREPL(%q) exit code = %d, want 0", c.input, exitCode)
@@ -128,7 +128,7 @@ func TestStartREPLReadError(t *testing.T) {
 	readErr := errors.New("boom")
 	var w bytes.Buffer
 
-	exitCode := startREPL(iotest.ErrReader(readErr), &w, newCommandRegistry())
+	exitCode := startREPL(iotest.ErrReader(readErr), &config{w: &w, registry: newCommandRegistry()})
 
 	if exitCode != 1 {
 		t.Errorf("startREPL(failing reader) exit code = %d, want 1", exitCode)
@@ -144,14 +144,14 @@ func TestStartREPLCommandError(t *testing.T) {
 		"boom": {
 			name:        "boom",
 			description: "always fails",
-			callback: func(commandConfig) error {
+			callback: func(*config) error {
 				return errors.New("command failed")
 			},
 		},
 	}
 	var w bytes.Buffer
 
-	exitCode := startREPL(strings.NewReader(input), &w, registry)
+	exitCode := startREPL(strings.NewReader(input), &config{w: &w, registry: registry})
 
 	if exitCode != 0 {
 		t.Errorf("startREPL(%q) exit code = %d, want 0", input, exitCode)
@@ -163,7 +163,7 @@ func TestStartREPLCommandError(t *testing.T) {
 
 func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 	var w bytes.Buffer
-	cfg := commandConfig{w: &w, registry: newCommandRegistry()}
+	cfg := &config{w: &w, registry: newCommandRegistry()}
 
 	if err := commandHelp(cfg); err != nil {
 		t.Fatalf("commandHelp() error = %v, want nil", err)
@@ -177,7 +177,7 @@ func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 func TestCommandExitSignalsExit(t *testing.T) {
 	var w bytes.Buffer
 
-	err := commandExit(commandConfig{w: &w})
+	err := commandExit(&config{w: &w})
 
 	if !errors.Is(err, errExit) {
 		t.Errorf("commandExit() error = %v, want errExit", err)
@@ -200,7 +200,7 @@ func TestCommandWriteErrors(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			cfg := commandConfig{w: errWriter{writeErr}, registry: newCommandRegistry()}
+			cfg := &config{w: errWriter{writeErr}, registry: newCommandRegistry()}
 
 			err := c.cmd(cfg)
 

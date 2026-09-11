@@ -10,21 +10,17 @@ import (
 )
 
 // startREPL reads commands from r, one per line, and writes the prompt and the
-// output of each command to w. Commands are looked up in registry; unknown
+// output of each command to cfg.w. Commands are looked up in cfg.registry; unknown
 // commands are reported and the loop continues, as does a command that fails
 // for any reason other than errExit. It stops when r is exhausted or when a
 // command returns errExit. It returns 0 on a clean end of input or a requested
 // exit, and 1 if reading r failed.
-func startREPL(r io.Reader, w io.Writer, registry map[string]cliCommand) (exitCode int) {
+func startREPL(r io.Reader, cfg *config) (exitCode int) {
 	const prompt = "Pokedex > "
 	scanner := bufio.NewScanner(r)
-	cfg := commandConfig{
-		w:        w,
-		registry: registry,
-	}
 
 	for {
-		_, _ = fmt.Fprint(w, prompt)
+		_, _ = fmt.Fprint(cfg.w, prompt)
 		if !scanner.Scan() {
 			break
 		}
@@ -36,9 +32,9 @@ func startREPL(r io.Reader, w io.Writer, registry map[string]cliCommand) (exitCo
 		}
 
 		command := input[0]
-		c, ok := registry[command]
+		c, ok := cfg.registry[command]
 		if !ok {
-			_, _ = fmt.Fprintln(w, "Unknown command")
+			_, _ = fmt.Fprintln(cfg.w, "Unknown command")
 			continue
 		}
 
