@@ -3,9 +3,6 @@ package main
 import "os"
 
 func main() {
-	cfg := &config{
-		w:        os.Stdout,
-		registry: newCommandRegistry(),
-	}
+	cfg := newConfig(os.Stdout)
 	os.Exit(startREPL(os.Stdin, cfg))
 }

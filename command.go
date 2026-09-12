@@ -5,12 +5,35 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"slices"
+	"time"
+
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
 )
 
 type config struct {
-	w        io.Writer
-	registry map[string]cliCommand
+	w                   io.Writer
+	registry            map[string]cliCommand
+	client              *http.Client
+	nextLocationURL     *string
+	previousLocationURL *string
+}
+
+// requestTimeout bounds every PokeAPI request, so a stalled connection cannot
+// hang the REPL.
+const requestTimeout = 10 * time.Second
+
+func newConfig(w io.Writer) *config {
+	startingURL := pokeapi.StartingLocationAreasURL
+
+	return &config{
+		w:                   w,
+		registry:            newCommandRegistry(),
+		client:              &http.Client{Timeout: requestTimeout},
+		nextLocationURL:     &startingURL,
+		previousLocationURL: nil,
+	}
 }
 
 type commandFunc func(cfg *config) error
@@ -33,6 +56,16 @@ func newCommandRegistry() map[string]cliCommand {
 			name:        "help",
 			description: "Displays a help menu",
 			callback:    commandHelp,
+		},
+		"map": {
+			name:        "map",
+			description: "Displays the names of the next 20 location areas of the world",
+			callback:    commandMap,
+		},
+		"mapb": {
+			name:        "mapb",
+			description: "Displays the names of the previous 20 location areas of the world",
+			callback:    commandMapb,
 		},
 	}
 }
@@ -75,5 +108,38 @@ func commandHelp(cfg *config) error {
 		}
 	}
 
+	return nil
+}
+
+func commandMap(cfg *config) error {
+	if cfg.nextLocationURL == nil {
+		_, err := fmt.Fprintln(cfg.w, "you're on the last page")
+		return err
+	}
+	return handleMap(cfg, *cfg.nextLocationURL)
+}
+
+func commandMapb(cfg *config) error {
+	if cfg.previousLocationURL == nil {
+		_, err := fmt.Fprintln(cfg.w, "you're on the first page")
+		return err
+	}
+	return handleMap(cfg, *cfg.previousLocationURL)
+}
+
+func handleMap(cfg *config, url string) error {
+	locationAreas, err := pokeapi.GetLocationAreas(cfg.client, url)
+	if err != nil {
+		return err
+	}
+
+	cfg.nextLocationURL = locationAreas.Next
+	cfg.previousLocationURL = locationAreas.Previous
+
+	for _, a := range locationAreas.Results {
+		if _, err := fmt.Fprintln(cfg.w, a.Name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
