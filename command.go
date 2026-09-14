@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,7 +22,7 @@ type config struct {
 }
 
 func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger) *config {
-	startingURL := pokeapi.StartingLocationAreasURL
+	startingURL := client.LocationAreasURL()
 
 	return &config{
 		w:                   w,
@@ -33,7 +34,7 @@ func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger) *config
 	}
 }
 
-type commandFunc func(cfg *config) error
+type commandFunc func(cfg *config, args []string) error
 
 type cliCommand struct {
 	name        string
@@ -64,6 +65,11 @@ func newCommandRegistry() map[string]cliCommand {
 			description: "Displays the names of the previous 20 location areas of the world",
 			callback:    commandMapb,
 		},
+		"explore": {
+			name:        "explore",
+			description: "Get information about Pokemon encounters of a location area",
+			callback:    commandExplore,
+		},
 	}
 }
 
@@ -87,14 +93,14 @@ func (e exitError) Error() string {
 // errExit tells the REPL to stop reading commands and return successfully.
 const errExit exitError = "exit"
 
-func commandExit(cfg *config) error {
+func commandExit(cfg *config, args []string) error {
 	if _, err := fmt.Fprintln(cfg.w, "Closing the Pokedex... Goodbye!"); err != nil {
 		return err
 	}
 	return errExit
 }
 
-func commandHelp(cfg *config) error {
+func commandHelp(cfg *config, args []string) error {
 	if _, err := fmt.Fprint(cfg.w, "Welcome to the Pokedex!\nUsage:\n\n"); err != nil {
 		return err
 	}
@@ -108,7 +114,7 @@ func commandHelp(cfg *config) error {
 	return nil
 }
 
-func commandMap(cfg *config) error {
+func commandMap(cfg *config, args []string) error {
 	if cfg.nextLocationURL == nil {
 		_, err := fmt.Fprintln(cfg.w, "you're on the last page")
 		return err
@@ -116,7 +122,7 @@ func commandMap(cfg *config) error {
 	return showLocationAreas(cfg, *cfg.nextLocationURL)
 }
 
-func commandMapb(cfg *config) error {
+func commandMapb(cfg *config, args []string) error {
 	if cfg.previousLocationURL == nil {
 		_, err := fmt.Fprintln(cfg.w, "you're on the first page")
 		return err
@@ -137,6 +143,39 @@ func showLocationAreas(cfg *config, url string) error {
 
 	for _, a := range locationAreas.Results {
 		if _, err := fmt.Fprintln(cfg.w, a.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// commandExplore writes the names of the Pokemon that can be encountered in the
+// location area named by the first argument.
+func commandExplore(cfg *config, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: explore <location-area>")
+	}
+	name := args[0]
+
+	if _, err := fmt.Fprintf(cfg.w, "Exploring %s...\n", name); err != nil {
+		return err
+	}
+
+	area, err := cfg.client.GetLocationArea(name)
+	if err != nil {
+		return err
+	}
+
+	if len(area.PokemonEncounters) == 0 {
+		_, err := fmt.Fprintln(cfg.w, "No Pokemon found.")
+		return err
+	}
+
+	if _, err := fmt.Fprintln(cfg.w, "Found Pokemon:"); err != nil {
+		return err
+	}
+	for _, e := range area.PokemonEncounters {
+		if _, err := fmt.Fprintf(cfg.w, " - %s\n", e.Pokemon.Name); err != nil {
 			return err
 		}
 	}

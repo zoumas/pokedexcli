@@ -48,7 +48,7 @@ func run() int {
 		Timeout: requestTimeout,
 	}
 	cache := pokecache.New(ctx, logger, cacheInterval)
-	client := pokeapi.New(httpClient, cache)
+	client := pokeapi.New(httpClient, cache, pokeapi.DefaultBaseURL)
 	cfg := newConfig(os.Stdout, client, logger)
 
 	// startREPL blocks reading os.Stdin, so it cannot observe ctx itself. Run it
@@ -62,7 +62,7 @@ func run() int {
 	case exitCode := <-done:
 		return exitCode
 	case <-ctx.Done():
-		fmt.Fprintln(os.Stdout)
+		_, _ = fmt.Fprintln(os.Stdout)
 		return exitCodeInterrupted
 	}
 }

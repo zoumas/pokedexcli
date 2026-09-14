@@ -8,19 +8,25 @@ import (
 	"github.com/zoumas/pokedexcli/internal/pokecache"
 )
 
+// DefaultBaseURL is the root of the public PokéAPI v2.
+const DefaultBaseURL = "https://pokeapi.co/api/v2/"
+
 // Client fetches PokeAPI resources over HTTP, serving repeated requests for the
 // same URL from its cache.
 type Client struct {
 	httpClient *http.Client
 	cache      *pokecache.Cache
+	baseURL    string
 }
 
-// New returns a Client that makes requests with httpClient and stores response
-// bodies in cache.
-func New(httpClient *http.Client, cache *pokecache.Cache) *Client {
+// New returns a Client that makes requests with httpClient against baseURL and
+// stores response bodies in cache. Pass DefaultBaseURL for the public API; a
+// test server's URL substitutes for it.
+func New(httpClient *http.Client, cache *pokecache.Cache, baseURL string) *Client {
 	return &Client{
 		httpClient: httpClient,
 		cache:      cache,
+		baseURL:    baseURL,
 	}
 }
 

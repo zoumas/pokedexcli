@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/zoumas/pokedexcli/internal/pokeapi"
+	"github.com/zoumas/pokedexcli/internal/pokecache"
 )
 
 const prompt = "Pokedex > "
@@ -157,7 +162,7 @@ func TestStartREPLCommandError(t *testing.T) {
 		"boom": {
 			name:        "boom",
 			description: "always fails",
-			callback: func(*config) error {
+			callback: func(*config, []string) error {
 				return errors.New("command failed")
 			},
 		},
@@ -166,10 +171,14 @@ func TestStartREPLCommandError(t *testing.T) {
 
 	exitCode := startREPL(strings.NewReader(input), newTestConfig(t, &w, registry))
 
+	// The failure is reported to the user and the loop keeps going.
+	const failure = "boom: command failed\n"
+	want := prompt + failure + prompt + failure + prompt
+
 	if exitCode != 0 {
 		t.Errorf("startREPL(%q) exit code = %d, want 0", input, exitCode)
 	}
-	if diff := cmp.Diff(prompt+prompt+prompt, w.String()); diff != "" {
+	if diff := cmp.Diff(want, w.String()); diff != "" {
 		t.Errorf("startREPL(%q) output diff (-want +got):\n%s", input, diff)
 	}
 }
@@ -178,7 +187,7 @@ func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 	var w bytes.Buffer
 	cfg := newTestConfig(t, &w, newCommandRegistry())
 
-	if err := commandHelp(cfg); err != nil {
+	if err := commandHelp(cfg, []string{}); err != nil {
 		t.Fatalf("commandHelp() error = %v, want nil", err)
 	}
 
@@ -190,7 +199,7 @@ func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 func TestCommandExitSignalsExit(t *testing.T) {
 	var w bytes.Buffer
 
-	err := commandExit(newTestConfig(t, &w, nil))
+	err := commandExit(newTestConfig(t, &w, nil), []string{})
 
 	if !errors.Is(err, errExit) {
 		t.Errorf("commandExit() error = %v, want errExit", err)
@@ -215,7 +224,7 @@ func TestCommandWriteErrors(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			cfg := newTestConfig(t, errWriter{writeErr}, newCommandRegistry())
 
-			err := c.cmd(cfg)
+			err := c.cmd(cfg, []string{})
 
 			if !errors.Is(err, writeErr) {
 				t.Errorf("%s(failing writer) error = %v, want %v", c.name, err, writeErr)
@@ -228,3 +237,66 @@ func TestCommandWriteErrors(t *testing.T) {
 type errWriter struct{ err error }
 
 func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
+
+func TestCommandExploreRequiresAName(t *testing.T) {
+	var w bytes.Buffer
+
+	err := commandExplore(newTestConfig(t, &w, nil), nil)
+
+	if err == nil {
+		t.Fatalf("commandExplore(no args) error = nil, want a usage error")
+	}
+	if got, want := w.String(), ""; got != want {
+		t.Errorf("commandExplore(no args) output = %q, want %q", got, want)
+	}
+}
+
+func TestCommandExplore(t *testing.T) {
+	const body = `{
+	  "name": "pastoria-city-area",
+	  "pokemon_encounters": [
+	    {"pokemon": {"name": "tentacool", "url": "https://example.test/pokemon/72/"}},
+	    {"pokemon": {"name": "magikarp", "url": "https://example.test/pokemon/129/"}}
+	  ]
+	}`
+
+	cases := []struct {
+		name string
+		area string
+		body string
+		want string
+	}{
+		{
+			name: "lists every encountered pokemon",
+			area: "pastoria-city-area",
+			body: body,
+			want: "Exploring pastoria-city-area...\nFound Pokemon:\n - tentacool\n - magikarp\n",
+		},
+		{
+			name: "reports an area with no encounters",
+			area: "empty-area",
+			body: `{"name": "empty-area", "pokemon_encounters": []}`,
+			want: "Exploring empty-area...\nNo Pokemon found.\n",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(c.body))
+			}))
+			defer server.Close()
+
+			var w bytes.Buffer
+			cfg := newTestConfig(t, &w, nil)
+			cfg.client = pokeapi.New(server.Client(), pokecache.New(t.Context(), cfg.logger, time.Minute), server.URL)
+
+			if err := commandExplore(cfg, []string{c.area}); err != nil {
+				t.Fatalf("commandExplore(%q) error = %v, want nil", c.area, err)
+			}
+			if diff := cmp.Diff(c.want, w.String()); diff != "" {
+				t.Errorf("commandExplore(%q) output diff (-want +got):\n%s", c.area, diff)
+			}
+		})
+	}
+}

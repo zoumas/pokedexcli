@@ -10,9 +10,10 @@ import (
 )
 
 // startREPL reads commands from r, one per line, and writes the prompt and the
-// output of each command to cfg.w. Commands are looked up in cfg.registry; unknown
-// commands are reported and the loop continues, as does a command that fails
-// for any reason other than errExit. It stops when r is exhausted or when a
+// output of each command to cfg.w. Commands are looked up in cfg.registry;
+// unknown commands are reported and the loop continues, as does a command that
+// fails for any reason other than errExit. A failure is both logged and
+// reported to cfg.w, so the user always sees it. It stops when r is exhausted or when a
 // command returns errExit. It returns 0 on a clean end of input or a requested
 // exit, and 1 if reading r failed.
 func startREPL(r io.Reader, cfg *config) (exitCode int) {
@@ -38,12 +39,17 @@ func startREPL(r io.Reader, cfg *config) (exitCode int) {
 			continue
 		}
 
-		if err := c.callback(cfg); err != nil {
+		args := input[1:]
+
+		if err := c.callback(cfg, args); err != nil {
 			if errors.Is(err, errExit) {
 				return 0
 			}
 
 			cfg.logger.Error("command failed", slog.String("command", command), slog.Any("error", err))
+			if _, err := fmt.Fprintf(cfg.w, "%s: %v\n", command, err); err != nil {
+				cfg.logger.Error("writing command error failed", slog.Any("error", err))
+			}
 		}
 	}
 

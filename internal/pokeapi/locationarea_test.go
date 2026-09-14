@@ -31,10 +31,10 @@ const lastPageBody = `{
 }`
 
 // newTestClient returns a Client whose cache lives only for the duration of t.
-func newTestClient(t *testing.T, httpClient *http.Client) *Client {
+func newTestClient(t *testing.T, httpClient *http.Client, baseURL string) *Client {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(t.Output(), &slog.HandlerOptions{Level: slog.LevelDebug}))
-	return New(httpClient, pokecache.New(t.Context(), logger, 5*time.Second))
+	return New(httpClient, pokecache.New(t.Context(), logger, 5*time.Second), baseURL)
 }
 
 func TestGetLocationAreas(t *testing.T) {
@@ -68,7 +68,7 @@ func TestGetLocationAreas(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := newTestClient(t, server.Client())
+			client := newTestClient(t, server.Client(), server.URL)
 
 			areas, err := client.GetLocationAreas(server.URL)
 			if err != nil {
@@ -99,7 +99,7 @@ func TestGetLocationAreasNonOKStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.Client())
+	client := newTestClient(t, server.Client(), server.URL)
 
 	areas, err := client.GetLocationAreas(server.URL)
 
@@ -117,7 +117,7 @@ func TestGetLocationAreasBadJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.Client())
+	client := newTestClient(t, server.Client(), server.URL)
 
 	if _, err := client.GetLocationAreas(server.URL); err == nil {
 		t.Errorf("GetLocationAreas(%s) error = nil, want a decode error", server.URL)
@@ -129,17 +129,17 @@ func TestGetLocationAreasLive(t *testing.T) {
 		t.Skip("skipping live PokeAPI call in short mode")
 	}
 
-	client := newTestClient(t, &http.Client{})
+	client := newTestClient(t, &http.Client{}, DefaultBaseURL)
 
-	areas, err := client.GetLocationAreas(StartingLocationAreasURL)
+	areas, err := client.GetLocationAreas(client.LocationAreasURL())
 	if err != nil {
-		t.Fatalf("GetLocationAreas(%s) error = %v, want nil", StartingLocationAreasURL, err)
+		t.Fatalf("GetLocationAreas(%s) error = %v, want nil", client.LocationAreasURL(), err)
 	}
 	if len(areas.Results) != 20 {
-		t.Errorf("GetLocationAreas(%s) returned %d results, want 20", StartingLocationAreasURL, len(areas.Results))
+		t.Errorf("GetLocationAreas(%s) returned %d results, want 20", client.LocationAreasURL(), len(areas.Results))
 	}
 	if areas.Next == nil {
-		t.Errorf("GetLocationAreas(%s) Next = nil, want a next page URL", StartingLocationAreasURL)
+		t.Errorf("GetLocationAreas(%s) Next = nil, want a next page URL", client.LocationAreasURL())
 	}
 }
 
@@ -151,7 +151,7 @@ func TestGetLocationAreasUsesCache(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.Client())
+	client := newTestClient(t, server.Client(), server.URL)
 
 	first, err := client.GetLocationAreas(server.URL)
 	if err != nil {
@@ -178,7 +178,7 @@ func TestGetLocationAreasDoesNotCacheFailures(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newTestClient(t, server.Client())
+	client := newTestClient(t, server.Client(), server.URL)
 
 	for i := range 2 {
 		if _, err := client.GetLocationAreas(server.URL); err == nil {
