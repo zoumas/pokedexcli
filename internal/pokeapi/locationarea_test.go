@@ -1,11 +1,14 @@
 package pokeapi
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/zoumas/pokedexcli/internal/pokecache"
 )
 
 const firstPageBody = `{
@@ -26,6 +29,13 @@ const lastPageBody = `{
     {"name": "pastoria-city-area", "url": "https://pokeapi.co/api/v2/location-area/3/"}
   ]
 }`
+
+// newTestClient returns a Client whose cache lives only for the duration of t.
+func newTestClient(t *testing.T, httpClient *http.Client) *Client {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(t.Output(), &slog.HandlerOptions{Level: slog.LevelDebug}))
+	return New(httpClient, pokecache.New(t.Context(), logger, 5*time.Second))
+}
 
 func TestGetLocationAreas(t *testing.T) {
 	cases := []struct {
@@ -58,7 +68,9 @@ func TestGetLocationAreas(t *testing.T) {
 			}))
 			defer server.Close()
 
-			areas, err := GetLocationAreas(server.Client(), server.URL)
+			client := newTestClient(t, server.Client())
+
+			areas, err := client.GetLocationAreas(server.URL)
 			if err != nil {
 				t.Fatalf("GetLocationAreas(%s) error = %v, want nil", server.URL, err)
 			}
@@ -87,7 +99,9 @@ func TestGetLocationAreasNonOKStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	areas, err := GetLocationAreas(server.Client(), server.URL)
+	client := newTestClient(t, server.Client())
+
+	areas, err := client.GetLocationAreas(server.URL)
 
 	if err == nil {
 		t.Fatalf("GetLocationAreas(%s) error = nil, want an error for status 429", server.URL)
@@ -103,7 +117,9 @@ func TestGetLocationAreasBadJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := GetLocationAreas(server.Client(), server.URL); err == nil {
+	client := newTestClient(t, server.Client())
+
+	if _, err := client.GetLocationAreas(server.URL); err == nil {
 		t.Errorf("GetLocationAreas(%s) error = nil, want a decode error", server.URL)
 	}
 }
@@ -113,7 +129,9 @@ func TestGetLocationAreasLive(t *testing.T) {
 		t.Skip("skipping live PokeAPI call in short mode")
 	}
 
-	areas, err := GetLocationAreas(&http.Client{}, StartingLocationAreasURL)
+	client := newTestClient(t, &http.Client{})
+
+	areas, err := client.GetLocationAreas(StartingLocationAreasURL)
 	if err != nil {
 		t.Fatalf("GetLocationAreas(%s) error = %v, want nil", StartingLocationAreasURL, err)
 	}
@@ -122,5 +140,53 @@ func TestGetLocationAreasLive(t *testing.T) {
 	}
 	if areas.Next == nil {
 		t.Errorf("GetLocationAreas(%s) Next = nil, want a next page URL", StartingLocationAreasURL)
+	}
+}
+
+func TestGetLocationAreasUsesCache(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(firstPageBody))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.Client())
+
+	first, err := client.GetLocationAreas(server.URL)
+	if err != nil {
+		t.Fatalf("GetLocationAreas(%s) first call error = %v, want nil", server.URL, err)
+	}
+	second, err := client.GetLocationAreas(server.URL)
+	if err != nil {
+		t.Fatalf("GetLocationAreas(%s) second call error = %v, want nil", server.URL, err)
+	}
+
+	if requests != 1 {
+		t.Errorf("GetLocationAreas(%s) made %d requests for 2 calls, want 1", server.URL, requests)
+	}
+	if diff := cmp.Diff(first, second); diff != "" {
+		t.Errorf("GetLocationAreas(%s) cached result diff (-first +second):\n%s", server.URL, diff)
+	}
+}
+
+func TestGetLocationAreasDoesNotCacheFailures(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.Client())
+
+	for i := range 2 {
+		if _, err := client.GetLocationAreas(server.URL); err == nil {
+			t.Fatalf("GetLocationAreas(%s) call %d error = nil, want an error", server.URL, i+1)
+		}
+	}
+
+	if requests != 2 {
+		t.Errorf("GetLocationAreas(%s) made %d requests for 2 failing calls, want 2", server.URL, requests)
 	}
 }

@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net/http"
 	"slices"
-	"time"
 
 	"github.com/zoumas/pokedexcli/internal/pokeapi"
 )
@@ -15,22 +13,18 @@ import (
 type config struct {
 	w                   io.Writer
 	registry            map[string]cliCommand
-	client              *http.Client
 	nextLocationURL     *string
 	previousLocationURL *string
+	client              *pokeapi.Client
 }
 
-// requestTimeout bounds every PokeAPI request, so a stalled connection cannot
-// hang the REPL.
-const requestTimeout = 10 * time.Second
-
-func newConfig(w io.Writer) *config {
+func newConfig(w io.Writer, client *pokeapi.Client) *config {
 	startingURL := pokeapi.StartingLocationAreasURL
 
 	return &config{
 		w:                   w,
 		registry:            newCommandRegistry(),
-		client:              &http.Client{Timeout: requestTimeout},
+		client:              client,
 		nextLocationURL:     &startingURL,
 		previousLocationURL: nil,
 	}
@@ -128,7 +122,7 @@ func commandMapb(cfg *config) error {
 }
 
 func handleMap(cfg *config, url string) error {
-	locationAreas, err := pokeapi.GetLocationAreas(cfg.client, url)
+	locationAreas, err := cfg.client.GetLocationAreas(url)
 	if err != nil {
 		return err
 	}

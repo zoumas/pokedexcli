@@ -5,7 +5,6 @@ package pokeapi
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 )
 
 // StartingLocationAreasURL is the first page of the location-area endpoint.
@@ -23,23 +22,16 @@ type LocationAreas struct {
 	} `json:"results"`
 }
 
-// GetLocationAreas fetches the page of location areas at url using client.
-func GetLocationAreas(client *http.Client, url string) (*LocationAreas, error) {
-	resp, err := client.Get(url)
+// GetLocationAreas fetches the page of location areas at url.
+func (c *Client) GetLocationAreas(url string) (*LocationAreas, error) {
+	data, err := c.get(url)
 	if err != nil {
 		return nil, fmt.Errorf("getting location areas: %w", err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("getting location areas: unexpected status %s", resp.Status)
-	}
 
 	var locationAreas LocationAreas
-	if err := json.NewDecoder(resp.Body).Decode(&locationAreas); err != nil {
-		return nil, fmt.Errorf("decoding location areas: %w", err)
+	if err := json.Unmarshal(data, &locationAreas); err != nil {
+		return nil, fmt.Errorf("unmarshalling location areas: %w", err)
 	}
 	return &locationAreas, nil
 }
