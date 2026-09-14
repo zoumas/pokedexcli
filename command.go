@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"slices"
 
@@ -12,17 +13,19 @@ import (
 
 type config struct {
 	w                   io.Writer
+	logger              *slog.Logger
 	registry            map[string]cliCommand
 	nextLocationURL     *string
 	previousLocationURL *string
 	client              *pokeapi.Client
 }
 
-func newConfig(w io.Writer, client *pokeapi.Client) *config {
+func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger) *config {
 	startingURL := pokeapi.StartingLocationAreasURL
 
 	return &config{
 		w:                   w,
+		logger:              logger,
 		registry:            newCommandRegistry(),
 		client:              client,
 		nextLocationURL:     &startingURL,
@@ -110,7 +113,7 @@ func commandMap(cfg *config) error {
 		_, err := fmt.Fprintln(cfg.w, "you're on the last page")
 		return err
 	}
-	return handleMap(cfg, *cfg.nextLocationURL)
+	return showLocationAreas(cfg, *cfg.nextLocationURL)
 }
 
 func commandMapb(cfg *config) error {
@@ -118,10 +121,12 @@ func commandMapb(cfg *config) error {
 		_, err := fmt.Fprintln(cfg.w, "you're on the first page")
 		return err
 	}
-	return handleMap(cfg, *cfg.previousLocationURL)
+	return showLocationAreas(cfg, *cfg.previousLocationURL)
 }
 
-func handleMap(cfg *config, url string) error {
+// showLocationAreas fetches the page of location areas at url, records its
+// pagination URLs in cfg, and writes each area name to cfg.w.
+func showLocationAreas(cfg *config, url string) error {
 	locationAreas, err := cfg.client.GetLocationAreas(url)
 	if err != nil {
 		return err

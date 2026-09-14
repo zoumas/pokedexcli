@@ -10,16 +10,19 @@ import (
 // StartingLocationAreasURL is the first page of the location-area endpoint.
 const StartingLocationAreasURL = "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20"
 
+// LocationArea is a single location area in a LocationAreas page.
+type LocationArea struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
 // LocationAreas is one page of the location-area endpoint. Next and Previous
 // are nil on the last and first page respectively.
 type LocationAreas struct {
-	Count    int     `json:"count"`
-	Next     *string `json:"next"`
-	Previous *string `json:"previous"`
-	Results  []struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
-	} `json:"results"`
+	Count    int            `json:"count"`
+	Next     *string        `json:"next"`
+	Previous *string        `json:"previous"`
+	Results  []LocationArea `json:"results"`
 }
 
 // GetLocationAreas fetches the page of location areas at url.

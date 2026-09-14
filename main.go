@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/zoumas/pokedexcli/internal/pokeapi"
@@ -48,7 +49,7 @@ func run() int {
 	}
 	cache := pokecache.New(ctx, logger, cacheInterval)
 	client := pokeapi.New(httpClient, cache)
-	cfg := newConfig(os.Stdout, client)
+	cfg := newConfig(os.Stdout, client, logger)
 
 	// startREPL blocks reading os.Stdin, so it cannot observe ctx itself. Run it
 	// alongside the interrupt and take whichever finishes first.
@@ -72,23 +73,47 @@ const exitCodeInterrupted = 130
 
 type closeFunc func() error
 
+// syncWriter serializes writes and the final flush and close. The REPL runs in
+// its own goroutine and can still be logging when an interrupt makes run return
+// and flush, and a bufio.Writer is not safe for concurrent use.
+type syncWriter struct {
+	mu sync.Mutex
+	bw *bufio.Writer
+	f  *os.File
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bw.Write(p)
+}
+
+// Close flushes any buffered records and closes the underlying file.
+func (s *syncWriter) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return errors.Join(s.bw.Flush(), s.f.Close())
+}
+
+// initializeLogger returns a logger writing JSON records to the file named by
+// name, along with a function that flushes and closes it. An empty name
+// discards all records.
 func initializeLogger(name string) (*slog.Logger, closeFunc, error) {
+	noop := func() error { return nil }
+
 	if name == "" {
-		return slog.New(slog.NewTextHandler(io.Discard, nil)), func() error { return nil }, nil
+		return slog.New(slog.NewTextHandler(io.Discard, nil)), noop, nil
 	}
 	file, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return nil, func() error { return nil }, err
+		return nil, noop, err
 	}
 
-	bufferedFile := bufio.NewWriterSize(file, 8192)
+	w := &syncWriter{bw: bufio.NewWriter(file), f: file}
 
-	handler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	})
-	logger := slog.New(handler)
 
-	return logger, func() error {
-		return errors.Join(bufferedFile.Flush(), file.Close())
-	}, nil
+	return slog.New(handler), w.Close, nil
 }

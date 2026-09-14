@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -22,6 +24,17 @@ func helpOutput(registry map[string]cliCommand) string {
 		fmt.Fprintf(&b, "%s: %s\n", c.name, c.description)
 	}
 	return b.String()
+}
+
+// newTestConfig returns a config writing to w, with commands from registry and
+// a logger that sends records to the test log.
+func newTestConfig(t *testing.T, w io.Writer, registry map[string]cliCommand) *config {
+	t.Helper()
+	return &config{
+		w:        w,
+		logger:   slog.New(slog.NewTextHandler(t.Output(), &slog.HandlerOptions{Level: slog.LevelDebug})),
+		registry: registry,
+	}
 }
 
 func TestCleanInput(t *testing.T) {
@@ -112,7 +125,7 @@ func TestStartREPL(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var w bytes.Buffer
 
-			exitCode := startREPL(strings.NewReader(c.input), &config{w: &w, registry: newCommandRegistry()})
+			exitCode := startREPL(strings.NewReader(c.input), newTestConfig(t, &w, newCommandRegistry()))
 
 			if exitCode != 0 {
 				t.Errorf("startREPL(%q) exit code = %d, want 0", c.input, exitCode)
@@ -128,7 +141,7 @@ func TestStartREPLReadError(t *testing.T) {
 	readErr := errors.New("boom")
 	var w bytes.Buffer
 
-	exitCode := startREPL(iotest.ErrReader(readErr), &config{w: &w, registry: newCommandRegistry()})
+	exitCode := startREPL(iotest.ErrReader(readErr), newTestConfig(t, &w, newCommandRegistry()))
 
 	if exitCode != 1 {
 		t.Errorf("startREPL(failing reader) exit code = %d, want 1", exitCode)
@@ -151,7 +164,7 @@ func TestStartREPLCommandError(t *testing.T) {
 	}
 	var w bytes.Buffer
 
-	exitCode := startREPL(strings.NewReader(input), &config{w: &w, registry: registry})
+	exitCode := startREPL(strings.NewReader(input), newTestConfig(t, &w, registry))
 
 	if exitCode != 0 {
 		t.Errorf("startREPL(%q) exit code = %d, want 0", input, exitCode)
@@ -163,7 +176,7 @@ func TestStartREPLCommandError(t *testing.T) {
 
 func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 	var w bytes.Buffer
-	cfg := &config{w: &w, registry: newCommandRegistry()}
+	cfg := newTestConfig(t, &w, newCommandRegistry())
 
 	if err := commandHelp(cfg); err != nil {
 		t.Fatalf("commandHelp() error = %v, want nil", err)
@@ -177,7 +190,7 @@ func TestCommandHelpListsEveryRegisteredCommand(t *testing.T) {
 func TestCommandExitSignalsExit(t *testing.T) {
 	var w bytes.Buffer
 
-	err := commandExit(&config{w: &w})
+	err := commandExit(newTestConfig(t, &w, nil))
 
 	if !errors.Is(err, errExit) {
 		t.Errorf("commandExit() error = %v, want errExit", err)
@@ -200,7 +213,7 @@ func TestCommandWriteErrors(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			cfg := &config{w: errWriter{writeErr}, registry: newCommandRegistry()}
+			cfg := newTestConfig(t, errWriter{writeErr}, newCommandRegistry())
 
 			err := c.cmd(cfg)
 

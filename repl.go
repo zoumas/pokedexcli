@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -43,12 +43,12 @@ func startREPL(r io.Reader, cfg *config) (exitCode int) {
 				return 0
 			}
 
-			log.Printf("command error: %v", err)
+			cfg.logger.Error("command failed", slog.String("command", command), slog.Any("error", err))
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("scan error: %v", err)
+		cfg.logger.Error("reading input failed", slog.Any("error", err))
 		return 1
 	}
 	return 0

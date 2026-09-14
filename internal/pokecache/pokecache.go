@@ -39,23 +39,22 @@ func New(ctx context.Context, logger *slog.Logger, interval time.Duration) *Cach
 // after the call.
 func (c *Cache) Add(key string, val []byte) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.logger.Debug("cache add", slog.String("key", key))
-
 	c.m[key] = cacheEntry{
 		createdAt: time.Now(),
 		val:       val,
 	}
+	c.mu.Unlock()
+
+	c.logger.Debug("cache add", slog.String("key", key))
 }
 
 // Get returns the value stored under key and whether it was present. The
 // returned slice is the stored one, not a copy, so callers must not modify it.
 func (c *Cache) Get(key string) ([]byte, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	entry, ok := c.m[key]
+	c.mu.RUnlock()
+
 	if !ok {
 		c.logger.Debug("cache miss", slog.String("key", key))
 		return nil, false
@@ -82,13 +81,18 @@ func (c *Cache) reapLoop(ctx context.Context, interval time.Duration) {
 
 // reap deletes every entry older than interval.
 func (c *Cache) reap(interval time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	var reaped []string
 
+	c.mu.Lock()
 	for key, entry := range c.m {
 		if time.Since(entry.createdAt) > interval {
-			c.logger.Debug("cache reap", slog.String("key", key))
 			delete(c.m, key)
+			reaped = append(reaped, key)
 		}
+	}
+	c.mu.Unlock()
+
+	for _, key := range reaped {
+		c.logger.Debug("cache reap", slog.String("key", key))
 	}
 }
