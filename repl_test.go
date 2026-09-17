@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -298,5 +299,109 @@ func TestCommandExplore(t *testing.T) {
 				t.Errorf("commandExplore(%q) output diff (-want +got):\n%s", c.area, diff)
 			}
 		})
+	}
+}
+
+func TestCommandCatchRequiresAName(t *testing.T) {
+	var w bytes.Buffer
+
+	err := commandCatch(newTestConfig(t, &w, nil), nil)
+
+	if err == nil {
+		t.Fatalf("commandCatch(no args) error = nil, want a usage error")
+	}
+	if got, want := w.String(), ""; got != want {
+		t.Errorf("commandCatch(no args) output = %q, want %q", got, want)
+	}
+}
+
+func TestCommandCatch(t *testing.T) {
+	const body = `{"name": "pidgey", "base_experience": 50}`
+
+	cases := []struct {
+		name     string
+		seed     uint64
+		want     string
+		wantHeld bool
+	}{
+		{
+			name:     "a successful throw stores the pokemon",
+			seed:     2,
+			want:     "Throwing a Pokeball at pidgey...\npidgey was caught!\n",
+			wantHeld: true,
+		},
+		{
+			name:     "an escaped pokemon is not stored",
+			seed:     1,
+			want:     "Throwing a Pokeball at pidgey...\npidgey escaped!\n",
+			wantHeld: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			var w bytes.Buffer
+			cfg := newTestConfig(t, &w, nil)
+			cfg.client = pokeapi.New(server.Client(), pokecache.New(t.Context(), cfg.logger, time.Minute), server.URL)
+			cfg.caughtPokemon = make(map[string]*pokeapi.Pokemon)
+			cfg.rng = rand.New(rand.NewPCG(c.seed, c.seed))
+
+			if err := commandCatch(cfg, []string{"pidgey"}); err != nil {
+				t.Fatalf("commandCatch(%q) error = %v, want nil", "pidgey", err)
+			}
+			if diff := cmp.Diff(c.want, w.String()); diff != "" {
+				t.Errorf("commandCatch(%q) output diff (-want +got):\n%s", "pidgey", diff)
+			}
+
+			_, held := cfg.caughtPokemon["pidgey"]
+			if held != c.wantHeld {
+				t.Errorf("commandCatch(%q) stored = %v, want %v", "pidgey", held, c.wantHeld)
+			}
+		})
+	}
+}
+
+// TestCaughtFavorsWeakPokemon checks the shape of the catch curve rather than
+// any single outcome: a low base experience must be caught more often than a
+// high one, and neither may be certain.
+func TestCaughtFavorsWeakPokemon(t *testing.T) {
+	const trials = 10000
+
+	hits := func(baseExperience int) int {
+		rng := rand.New(rand.NewPCG(42, 42))
+		n := 0
+		for range trials {
+			if caught(rng, baseExperience) {
+				n++
+			}
+		}
+		return n
+	}
+
+	weak, strong := hits(39), hits(608)
+
+	if weak <= strong {
+		t.Errorf("caught() caught the weak pokemon %d/%d and the strong one %d/%d, want the weak one more often", weak, trials, strong, trials)
+	}
+	if strong == 0 {
+		t.Errorf("caught() never caught a base experience 608 pokemon in %d trials, want a nonzero chance", trials)
+	}
+	if weak == trials {
+		t.Errorf("caught() always caught a base experience 39 pokemon in %d trials, want a chance of escape", trials)
+	}
+}
+
+func TestCaughtHandlesZeroBaseExperience(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 1))
+
+	// base_experience is absent for some forms and decodes to 0; IntN would
+	// panic on a zero argument without the catchThreshold in the denominator.
+	if !caught(rng, 0) {
+		t.Errorf("caught(rng, 0) = false, want true")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"math/rand/v2"
 	"slices"
 
 	"github.com/zoumas/pokedexcli/internal/pokeapi"
@@ -19,9 +20,22 @@ type config struct {
 	nextLocationURL     *string
 	previousLocationURL *string
 	client              *pokeapi.Client
+	caughtPokemon       map[string]*pokeapi.Pokemon
+	rng                 *rand.Rand
 }
 
-func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger) *config {
+// catchThreshold tunes how catchable Pokemon are overall. A Pokemon with
+// base_experience equal to it is caught half the time.
+const catchThreshold = 50
+
+// caught reports whether a Pokemon with the given base experience is caught.
+// The chance is catchThreshold/(baseExperience+catchThreshold), so it falls as
+// base experience rises and never reaches 0 or 1.
+func caught(rng *rand.Rand, baseExperience int) bool {
+	return rng.IntN(baseExperience+catchThreshold) < catchThreshold
+}
+
+func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger, rng *rand.Rand) *config {
 	startingURL := client.LocationAreasURL()
 
 	return &config{
@@ -31,6 +45,8 @@ func newConfig(w io.Writer, client *pokeapi.Client, logger *slog.Logger) *config
 		client:              client,
 		nextLocationURL:     &startingURL,
 		previousLocationURL: nil,
+		caughtPokemon:       make(map[string]*pokeapi.Pokemon),
+		rng:                 rng,
 	}
 }
 
@@ -69,6 +85,11 @@ func newCommandRegistry() map[string]cliCommand {
 			name:        "explore",
 			description: "Get information about Pokemon encounters of a location area",
 			callback:    commandExplore,
+		},
+		"catch": {
+			name:        "catch",
+			description: "Attempt to catch a Pokemon",
+			callback:    commandCatch,
 		},
 	}
 }
@@ -179,5 +200,38 @@ func commandExplore(cfg *config, args []string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// commandCatch attempts to catch the Pokemon named by the first argument,
+// adding it to cfg.caughtPokemon on success.
+func commandCatch(cfg *config, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: catch <pokemon>")
+	}
+	name := args[0]
+
+	if _, err := fmt.Fprintf(cfg.w, "Throwing a Pokeball at %s...\n", name); err != nil {
+		return err
+	}
+
+	pokemon, err := cfg.client.GetPokemon(name)
+	if err != nil {
+		return err
+	}
+
+	if !caught(cfg.rng, pokemon.BaseExperience) {
+		if _, err := fmt.Fprintf(cfg.w, "%s escaped!\n", name); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if _, err := fmt.Fprintf(cfg.w, "%s was caught!\n", name); err != nil {
+		return err
+	}
+
+	cfg.caughtPokemon[name] = pokemon
+
 	return nil
 }

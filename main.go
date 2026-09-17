@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,7 +50,8 @@ func run() int {
 	}
 	cache := pokecache.New(ctx, logger, cacheInterval)
 	client := pokeapi.New(httpClient, cache, pokeapi.DefaultBaseURL)
-	cfg := newConfig(os.Stdout, client, logger)
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	cfg := newConfig(os.Stdout, client, logger, rng)
 
 	// startREPL blocks reading os.Stdin, so it cannot observe ctx itself. Run it
 	// alongside the interrupt and take whichever finishes first.
