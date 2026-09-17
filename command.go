@@ -91,6 +91,11 @@ func newCommandRegistry() map[string]cliCommand {
 			description: "Attempt to catch a Pokemon",
 			callback:    commandCatch,
 		},
+		"inspect": {
+			name:        "inspect",
+			description: "Get information about a Pokemon",
+			callback:    commandInspect,
+		},
 	}
 }
 
@@ -232,6 +237,48 @@ func commandCatch(cfg *config, args []string) error {
 	}
 
 	cfg.caughtPokemon[name] = pokemon
+
+	return nil
+}
+
+// commandInspect writes the details of a previously caught Pokemon named by the
+// first argument. It reads only cfg.caughtPokemon and makes no API call.
+func commandInspect(cfg *config, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: inspect <pokemon>")
+	}
+	name := args[0]
+
+	p, ok := cfg.caughtPokemon[name]
+	if !ok {
+		_, err := fmt.Fprintln(cfg.w, "you have not caught that pokemon")
+		return err
+	}
+
+	if _, err := fmt.Fprintf(
+		cfg.w,
+		"Name: %s\nHeight: %d\nWeight: %d\nStats:\n",
+		p.Name,
+		p.Height,
+		p.Weight,
+	); err != nil {
+		return err
+	}
+
+	for _, s := range p.Stats {
+		if _, err := fmt.Fprintf(cfg.w, "  -%s: %d\n", s.Stat.Name, s.BaseStat); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintln(cfg.w, "Types:"); err != nil {
+		return err
+	}
+	for _, t := range p.Types {
+		if _, err := fmt.Fprintf(cfg.w, "  - %s\n", t.Type.Name); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

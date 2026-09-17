@@ -405,3 +405,70 @@ func TestCaughtHandlesZeroBaseExperience(t *testing.T) {
 		t.Errorf("caught(rng, 0) = false, want true")
 	}
 }
+
+func TestCommandInspectRequiresAName(t *testing.T) {
+	var w bytes.Buffer
+
+	err := commandInspect(newTestConfig(t, &w, nil), nil)
+
+	if err == nil {
+		t.Fatalf("commandInspect(no args) error = nil, want a usage error")
+	}
+	if got, want := w.String(), ""; got != want {
+		t.Errorf("commandInspect(no args) output = %q, want %q", got, want)
+	}
+}
+
+func TestCommandInspectUncaught(t *testing.T) {
+	var w bytes.Buffer
+	cfg := newTestConfig(t, &w, nil)
+	cfg.caughtPokemon = make(map[string]*pokeapi.Pokemon)
+
+	if err := commandInspect(cfg, []string{"pidgey"}); err != nil {
+		t.Fatalf("commandInspect(%q) error = %v, want nil", "pidgey", err)
+	}
+
+	want := "you have not caught that pokemon\n"
+	if diff := cmp.Diff(want, w.String()); diff != "" {
+		t.Errorf("commandInspect(%q) output diff (-want +got):\n%s", "pidgey", diff)
+	}
+}
+
+func TestCommandInspect(t *testing.T) {
+	pidgey := &pokeapi.Pokemon{
+		Name:   "pidgey",
+		Height: 3,
+		Weight: 18,
+		Stats: []pokeapi.PokemonStat{
+			{BaseStat: 40, Stat: pokeapi.NamedResource{Name: "hp"}},
+			{BaseStat: 45, Stat: pokeapi.NamedResource{Name: "attack"}},
+			{BaseStat: 56, Stat: pokeapi.NamedResource{Name: "speed"}},
+		},
+		Types: []pokeapi.PokemonType{
+			{Type: pokeapi.NamedResource{Name: "normal"}},
+			{Type: pokeapi.NamedResource{Name: "flying"}},
+		},
+	}
+
+	var w bytes.Buffer
+	cfg := newTestConfig(t, &w, nil)
+	cfg.caughtPokemon = map[string]*pokeapi.Pokemon{"pidgey": pidgey}
+
+	if err := commandInspect(cfg, []string{"pidgey"}); err != nil {
+		t.Fatalf("commandInspect(%q) error = %v, want nil", "pidgey", err)
+	}
+
+	want := "Name: pidgey\n" +
+		"Height: 3\n" +
+		"Weight: 18\n" +
+		"Stats:\n" +
+		"  -hp: 40\n" +
+		"  -attack: 45\n" +
+		"  -speed: 56\n" +
+		"Types:\n" +
+		"  - normal\n" +
+		"  - flying\n"
+	if diff := cmp.Diff(want, w.String()); diff != "" {
+		t.Errorf("commandInspect(%q) output diff (-want +got):\n%s", "pidgey", diff)
+	}
+}
