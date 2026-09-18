@@ -1,3 +1,2 @@
 /pokedexcli
-/repl.log
-/debug.log
+*.log
