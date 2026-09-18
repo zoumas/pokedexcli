@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -219,6 +221,7 @@ func TestCommandWriteErrors(t *testing.T) {
 	}{
 		{name: "commandHelp", cmd: commandHelp},
 		{name: "commandExit", cmd: commandExit},
+		{name: "commandPokedex", cmd: commandPokedex},
 	}
 
 	for _, c := range cases {
@@ -470,5 +473,69 @@ func TestCommandInspect(t *testing.T) {
 		"  - flying\n"
 	if diff := cmp.Diff(want, w.String()); diff != "" {
 		t.Errorf("commandInspect(%q) output diff (-want +got):\n%s", "pidgey", diff)
+	}
+}
+
+// TestCommandCatchKeysByPokemonName checks that a Pokemon caught by id is
+// stored under the name PokeAPI returned, so that inspect and pokedex find it.
+func TestCommandCatchKeysByPokemonName(t *testing.T) {
+	const body = `{"id": 16, "name": "pidgey", "base_experience": 0}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	var w bytes.Buffer
+	cfg := newTestConfig(t, &w, nil)
+	cfg.client = pokeapi.New(server.Client(), pokecache.New(t.Context(), cfg.logger, time.Minute), server.URL)
+	cfg.caughtPokemon = make(map[string]*pokeapi.Pokemon)
+	cfg.rng = rand.New(rand.NewPCG(1, 1))
+
+	// base_experience 0 makes the throw always succeed.
+	if err := commandCatch(cfg, []string{"16"}); err != nil {
+		t.Fatalf("commandCatch(%q) error = %v, want nil", "16", err)
+	}
+
+	if _, ok := cfg.caughtPokemon["pidgey"]; !ok {
+		t.Errorf("commandCatch(%q) stored keys = %v, want a %q key", "16", slices.Sorted(maps.Keys(cfg.caughtPokemon)), "pidgey")
+	}
+}
+
+func TestCommandPokedexEmpty(t *testing.T) {
+	var w bytes.Buffer
+	cfg := newTestConfig(t, &w, nil)
+	cfg.caughtPokemon = make(map[string]*pokeapi.Pokemon)
+
+	if err := commandPokedex(cfg, nil); err != nil {
+		t.Fatalf("commandPokedex(empty) error = %v, want nil", err)
+	}
+
+	if diff := cmp.Diff("Your Pokedex:\n", w.String()); diff != "" {
+		t.Errorf("commandPokedex(empty) output diff (-want +got):\n%s", diff)
+	}
+}
+
+// TestCommandPokedexOrdersByID inserts out of Pokedex order, so that a passing
+// run shows the sort rather than the map's iteration order.
+func TestCommandPokedexOrdersByID(t *testing.T) {
+	var w bytes.Buffer
+	cfg := newTestConfig(t, &w, nil)
+	cfg.caughtPokemon = map[string]*pokeapi.Pokemon{
+		"pikachu":  {ID: 25, Name: "pikachu"},
+		"pidgey":   {ID: 16, Name: "pidgey"},
+		"caterpie": {ID: 10, Name: "caterpie"},
+	}
+
+	if err := commandPokedex(cfg, nil); err != nil {
+		t.Fatalf("commandPokedex() error = %v, want nil", err)
+	}
+
+	want := "Your Pokedex:\n" +
+		"  10. caterpie\n" +
+		"  16. pidgey\n" +
+		"  25. pikachu\n"
+	if diff := cmp.Diff(want, w.String()); diff != "" {
+		t.Errorf("commandPokedex() output diff (-want +got):\n%s", diff)
 	}
 }

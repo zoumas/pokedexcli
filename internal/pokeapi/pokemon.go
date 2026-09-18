@@ -12,6 +12,7 @@ const pokemonPath = "pokemon"
 // Pokemon is a single Pokemon. Fields of the endpoint that this program does
 // not use are omitted; encoding/json ignores them.
 type Pokemon struct {
+	ID             int           `json:"id"`
 	Name           string        `json:"name"`
 	BaseExperience int           `json:"base_experience"`
 	Height         int           `json:"height"`

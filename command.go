@@ -96,6 +96,11 @@ func newCommandRegistry() map[string]cliCommand {
 			description: "Get information about a Pokemon",
 			callback:    commandInspect,
 		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "List all caught Pokemon",
+			callback:    commandPokedex,
+		},
 	}
 }
 
@@ -236,7 +241,10 @@ func commandCatch(cfg *config, args []string) error {
 		return err
 	}
 
-	cfg.caughtPokemon[name] = pokemon
+	// Key by the name PokeAPI returned, not by what the user typed: the
+	// endpoint also accepts an id, and inspect and pokedex must agree on the
+	// name either way.
+	cfg.caughtPokemon[pokemon.Name] = pokemon
 
 	return nil
 }
@@ -280,5 +288,26 @@ func commandInspect(cfg *config, args []string) error {
 		}
 	}
 
+	return nil
+}
+
+// commandPokedex writes every caught Pokemon, ordered by Pokedex number. It
+// reads only cfg.caughtPokemon and makes no API call.
+func commandPokedex(cfg *config, args []string) error {
+	if _, err := fmt.Fprintln(cfg.w, "Your Pokedex:"); err != nil {
+		return err
+	}
+
+	caughtPokemon := slices.Collect(maps.Values(cfg.caughtPokemon))
+
+	slices.SortFunc(caughtPokemon, func(a, b *pokeapi.Pokemon) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
+
+	for _, p := range caughtPokemon {
+		if _, err := fmt.Fprintf(cfg.w, "  %d. %s\n", p.ID, p.Name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
